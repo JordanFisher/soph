@@ -22,8 +22,7 @@ namespace Sophonautical
             Rows = 10000,
             RowSize = 3073,
 
-            BlockDim = 5,
-            BlockSize = BlockDim * BlockDim * 3;
+            BlockDim = 5;
 
         const float
             GroupThreshold = .05f,
@@ -83,6 +82,14 @@ namespace Sophonautical
 
             Debug.Assert(source_index == Rows * RowSize);
 
+            var kernels = LearnLevel(images, Width, Height, 3, NumKernels: 3);
+            var output = LevelOutput(kernels, images, Width, Height, 3, NumKernels: 3);
+        }
+
+        static Kernel[] LearnLevel(float[][,,] images, int Width, int Height, int Channels, int NumKernels = 3)
+        {
+            int BlockSize = BlockDim * BlockDim * Channels;
+
             // Unpack blocks.
             var blocks = new float[Rows * (Width - (BlockDim - 1)) * (Height - (BlockDim - 1))][];
             int block_index = 0;
@@ -94,12 +101,12 @@ namespace Sophonautical
                 for (int x = 0; x < Width - (BlockDim - 1); x++)
                 for (int y = 0; y < Height - (BlockDim - 1); y++)
                 {
-                    var block = blocks[block_index++] = new float[BlockDim * BlockDim * 3];
+                    var block = blocks[block_index++] = new float[BlockSize];
 
                     int i = 0;
                     for (int _x = x; _x < x + BlockDim; _x++)
                     for (int _y = y; _y < y + BlockDim; _y++)
-                    for (int _c = 0; _c < 3; _c++)
+                    for (int _c = 0; _c < Channels; _c++)
                     {
                         block[i++] = (float)image[_x, _y, _c];
                     }
@@ -109,21 +116,27 @@ namespace Sophonautical
             Debug.Assert(block_index == blocks.Length);
 
             // Find level 1 kernels
-            int NumKernels = 3;
             var Kernels = new AffineKernel[NumKernels];
             for (int i = 0; i < NumKernels; i++)
             {
-                var kernel = Kernels[i] = FindKernel(blocks);
+                var kernel = Kernels[i] = FindKernel(blocks, BlockSize);
                 //kernel.Plot();
 
                 var remainder = SetRemainder(blocks, kernel, GroupThreshold);
                 blocks = remainder;
             }
 
+            return Kernels;
+        }
+
+        static float[][,,] LevelOutput(Kernel[] Kernels, float[][,,] images, int Width, int Height, int Channels, int NumKernels = 3)
+        {
+            int BlockSize = BlockDim * BlockDim * Channels;
+
             // Construct level 1 output
             var _images = new float[Rows][,,];
             var _image_dim = Width - (BlockDim - 1);
-            var input = new float[BlockDim * BlockDim * 3];
+            var input = new float[BlockSize];
 
             for (int row = 0; row < Rows; row++)
             {
@@ -136,7 +149,7 @@ namespace Sophonautical
                     int i = 0;
                     for (int _x = x; _x < x + BlockDim; _x++)
                     for (int _y = y; _y < y + BlockDim; _y++)
-                    for (int _c = 0; _c < 3; _c++)
+                    for (int _c = 0; _c < Channels; _c++)
                     {
                         input[i++] = (float)image[_x, _y, _c];
                     }
@@ -161,7 +174,7 @@ namespace Sophonautical
                 pl.plot(image, _image);
             }
 
-            Console.ReadLine();
+            return _images;
         }
 
         static float TestKernel(float[][] blocks, Kernel kernel, float threshold, int step = 1)
@@ -260,7 +273,7 @@ namespace Sophonautical
 
             public AffineKernel(float[] w, float[] b=null) { this.w = w; this.b = b; }
 
-            public AffineKernel()
+            public AffineKernel(int BlockSize)
             {
                 w = new float[BlockSize];
                 b = new float[BlockSize];
@@ -309,13 +322,13 @@ namespace Sophonautical
             }
         }
 
-        static AffineKernel FindKernel(float[][] blocks)
+        static AffineKernel FindKernel(float[][] blocks, int BlockSize)
         {
             float best_score = 0;
             AffineKernel best_kernel = null;
             for (int i = 0; i < 500; i++)
             {
-                var kernel = new AffineKernel();
+                var kernel = new AffineKernel(BlockSize);
 
                 int w_index = rnd.Next(0, blocks.Length - 1);
                 int b_index = rnd.Next(0, blocks.Length - 1);
