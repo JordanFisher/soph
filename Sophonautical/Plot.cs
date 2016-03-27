@@ -41,12 +41,12 @@ namespace Sophonautical
             run_cmd(py_file, "");
         }
 
-        string py_array(float[] data)
+        public string py_array(float[] data)
         {
             return '[' + string.Join(",", data) + ']';
         }
 
-        string py_array(float[,] data)
+        public string py_array(float[,] data)
         {
             StringBuilder s = new StringBuilder();
             s.Append('[');
@@ -70,7 +70,7 @@ namespace Sophonautical
             return s.ToString();
         }
 
-        string py_array<T>(T[,,] data)
+        public string py_array<T>(T[,,] data)
         {
             StringBuilder s = new StringBuilder();
             s.Append('[');

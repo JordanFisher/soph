@@ -41,6 +41,7 @@ namespace Sophonautical
     class Util
     {
         public const float eps = .00001f;
+        static Plot pl = new Plot("");
 
         public static void Timeit(Action a, string description)
         {
@@ -55,10 +56,9 @@ namespace Sophonautical
             Console.WriteLine($"{description}, took {ts.Milliseconds / 100f} ms.");
         }
 
-        public static string s(float[] data)
-        {
-            return '(' + string.Join(",", data) + ')';
-        }
+        public static string s(float[] data) { return pl.py_array(data); }
+        public static string s(float[,] data) { return pl.py_array(data); }
+        public static string s(float[,,] data) { return pl.py_array(data); }
 
         public static float[,,] AsImage(float[] data)
         {
@@ -138,6 +138,17 @@ namespace Sophonautical
             for (int i = 0; i < vec.Length; i++)
             {
                 sum += Math.Abs(vec[i]);
+            }
+
+            return sum;
+        }
+
+        public static float Norm1Thresh(float[] vec, float threshold = .2f)
+        {
+            float sum = 0;
+            for (int i = 0; i < vec.Length; i++)
+            {
+                sum += Math.Abs(vec[i]) > threshold ? threshold : Math.Abs(vec[i]);
             }
 
             return sum;

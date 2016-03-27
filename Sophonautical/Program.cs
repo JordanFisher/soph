@@ -26,11 +26,13 @@ namespace Sophonautical
             BlockSize = BlockDim * BlockDim * 3;
 
         const float
-            GroupThreshold = .05f;
+            GroupThreshold = .05f,
+            ApplyThreshold = 10 * GroupThreshold;
 
         static void Test()
         {
             return;
+            Console.WriteLine(s(new float[,] { { 1, 2 }, { 4, 5 } }));
 
             var k = new AffineKernel(new float[] { 1, 2, 3 }, new float[] { 0, 0, 0 });
             var input = new float[] { 2.1f, 4.1f, 6.1f };
@@ -86,26 +88,28 @@ namespace Sophonautical
             int block_index = 0;
 
             for (int row = 0; row < Rows; row++)
-            for (int x = 0; x < Width - (BlockDim - 1); x++)
-            for (int y = 0; y < Height - (BlockDim - 1); y++)
             {
                 var image = images[row];
-                var block = blocks[block_index++] = new float[BlockDim * BlockDim * 3];
 
-                int i = 0;
-                for (int _x = x; _x < x + BlockDim; _x++)
-                for (int _y = y; _y < y + BlockDim; _y++)
-                for (int _c = 0; _c < 3; _c++)
+                for (int x = 0; x < Width - (BlockDim - 1); x++)
+                for (int y = 0; y < Height - (BlockDim - 1); y++)
                 {
-                    block[i++] = (float)image[_x, _y, _c];
-                }
+                    var block = blocks[block_index++] = new float[BlockDim * BlockDim * 3];
 
-                //Normalize(block);
+                    int i = 0;
+                    for (int _x = x; _x < x + BlockDim; _x++)
+                    for (int _y = y; _y < y + BlockDim; _y++)
+                    for (int _c = 0; _c < 3; _c++)
+                    {
+                        block[i++] = (float)image[_x, _y, _c];
+                    }
+                }
             }
 
             Debug.Assert(block_index == blocks.Length);
 
-            int NumKernels = 20;
+            // Find level 1 kernels
+            int NumKernels = 3;
             var Kernels = new AffineKernel[NumKernels];
             for (int i = 0; i < NumKernels; i++)
             {
@@ -114,6 +118,47 @@ namespace Sophonautical
 
                 var remainder = SetRemainder(blocks, kernel, GroupThreshold);
                 blocks = remainder;
+            }
+
+            // Construct level 1 output
+            var _images = new float[Rows][,,];
+            var _image_dim = Width - (BlockDim - 1);
+            var input = new float[BlockDim * BlockDim * 3];
+
+            for (int row = 0; row < Rows; row++)
+            {
+                var image = images[row];
+                var _image = new float[_image_dim, _image_dim, NumKernels];
+
+                for (int x = 0; x < Width - (BlockDim - 1); x++)
+                for (int y = 0; y < Height - (BlockDim - 1); y++)
+                {
+                    int i = 0;
+                    for (int _x = x; _x < x + BlockDim; _x++)
+                    for (int _y = y; _y < y + BlockDim; _y++)
+                    for (int _c = 0; _c < 3; _c++)
+                    {
+                        input[i++] = (float)image[_x, _y, _c];
+                    }
+
+                    for (int k = 0; k < NumKernels; k++)
+                    {
+                        var kernel = Kernels[k];
+
+                        if (kernel.Score(input) < ApplyThreshold)
+                        {
+                            _image[x, y, k] = kernel.Apply(input);
+                            input = kernel.Remainder(input);
+                        }
+                        else
+                        {
+                            _image[x, y, k] = 0;
+                        }
+                    }
+                }
+
+                // Side by side image comparison of input and output.
+                pl.plot(image, _image);
             }
 
             Console.ReadLine();
@@ -187,8 +232,8 @@ namespace Sophonautical
                 var remainder = Remainder(input);
 
                 //var error = NormInf(remainder);
-                var error = Norm1(remainder) / input.Length;
-                //var error = Norm0(remainder);
+                //var error = Norm1(remainder) / input.Length;
+                var error = Norm1Thresh(remainder) / input.Length;
 
                 return error;
             }
