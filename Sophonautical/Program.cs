@@ -89,13 +89,20 @@ namespace Sophonautical
                 NumKernels: num_kernels1, BlockDim: block_dim1);
             var output1 = LevelOutput(kernels1, images, Width, Height, 3,
                 NumKernels: num_kernels1, BlockDim: block_dim1);
+            pl.plot(output1[0]);
+            NormalizeComponents(output1, output_dim1, output_dim1, num_kernels1);
+            pl.plot(output1[0]);
 
             Console.WriteLine("\n\nLearning level 2\n\n");
 
+            int block_dim2 = 3, num_kernels2 = 3;
+            var output_dim2 = output_dim1 - (block_dim2 - 1);
+
             var kernels2 = LearnLevel(output1, output_dim1, output_dim1, num_kernels1,
-                NumKernels: 3, BlockDim: 3);
+                NumKernels: num_kernels2, BlockDim: block_dim2);
             var output2 = LevelOutput(kernels2, output1, output_dim1, output_dim1, num_kernels1,
-                NumKernels: 3, BlockDim: 3);
+                NumKernels: num_kernels2, BlockDim: block_dim2);
+            NormalizeComponents(output2, output_dim2, output_dim2, num_kernels2);
 
             // Side by side image comparison of input and output.
             for (int i = 0; i < Rows; i++)

@@ -247,6 +247,30 @@ namespace Sophonautical
             return new Tuple<float, float>(argmin, min);
         }
 
+        public static void NormalizeComponents(float[][,,] inputs, int width, int height, int channels)
+        {
+            float[] min = new float[channels];
+            float[] max = new float[channels];
+            for (int i = 0; i < channels; i++) min[i] = max[i] = inputs[0][0, 0, i];
+
+            for (int i = 0; i < inputs.Length; i++)
+            for (int x = 0; x < width; x++)
+            for (int y = 0; y < height; y++)
+            for (int c = 0; c < channels; c++)
+            {
+                min[c] = Math.Min(min[c], inputs[i][x, y, c]);
+                max[c] = Math.Max(max[c], inputs[i][x, y, c]);
+            }
+
+            for (int i = 0; i < inputs.Length; i++)
+            for (int x = 0; x < width; x++)
+            for (int y = 0; y < height; y++)
+            for (int c = 0; c < channels; c++)
+            {
+                inputs[i][x, y, c] = (inputs[i][x, y, c] - min[c]) / (max[c] - min[c]);
+            }
+        }
+
         public static void SaveImage(float[,,] image, string name, string dir = "")
         {
             int Width = image.GetLength(0);
