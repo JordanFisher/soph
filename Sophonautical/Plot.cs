@@ -152,6 +152,19 @@ fig, (pl1, pl2) = pl.subplots(1,2)
             ");
         }
 
+        string multiplot(string plot1, string plot2, string plot3)
+        {
+            return string.Format($@"
+fig, (pl1, pl2, pl3) = pl.subplots(1,3)
+
+{plot1}
+
+{plot2}
+
+{plot3}
+            ");
+        }
+
         public string make_plot(float[] data, string plot_ref = "pl")
         {
             return line_plot(py_array(data), plot_ref);
@@ -188,6 +201,15 @@ fig, (pl1, pl2) = pl.subplots(1,2)
             return multiplot(make_plot(data1, plot_ref:"pl1"), make_plot(data2, plot_ref:"pl2"));
         }
 
+        public string make_plot(object data1, object data2, object data3)
+        {
+            return multiplot(
+                make_plot(data1, plot_ref: "pl1"),
+                make_plot(data2, plot_ref: "pl2"),
+                make_plot(data3, plot_ref: "pl3")
+            );
+        }
+
         public void plot(object data)
         {
             string py = py_plot(make_plot(data));
@@ -197,6 +219,12 @@ fig, (pl1, pl2) = pl.subplots(1,2)
         public void plot(object data1, object data2)
         {
             string py = py_plot(make_plot(data1, data2));
+            run_plot(py);
+        }
+
+        public void plot(object data1, object data2, object data3)
+        {
+            string py = py_plot(make_plot(data1, data2, data3));
             run_plot(py);
         }
 

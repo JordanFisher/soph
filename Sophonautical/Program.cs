@@ -20,9 +20,7 @@ namespace Sophonautical
         const int
             Width = 32, Height = 32,
             Rows = 10000,
-            RowSize = 3073,
-
-            BlockDim = 5;
+            RowSize = 3073;
 
         const float
             GroupThreshold = .05f,
@@ -82,11 +80,34 @@ namespace Sophonautical
 
             Debug.Assert(source_index == Rows * RowSize);
 
-            var kernels = LearnLevel(images, Width, Height, 3, NumKernels: 3);
-            var output = LevelOutput(kernels, images, Width, Height, 3, NumKernels: 3);
+            Console.WriteLine("\n\nLearning level 1\n\n");
+
+            int block_dim1 = 5, num_kernels1 = 8;
+            var output_dim1 = Width - (block_dim1 - 1);
+
+            var kernels1 = LearnLevel(images, Width, Height, 3,
+                NumKernels: num_kernels1, BlockDim: block_dim1);
+            var output1 = LevelOutput(kernels1, images, Width, Height, 3,
+                NumKernels: num_kernels1, BlockDim: block_dim1);
+
+            Console.WriteLine("\n\nLearning level 2\n\n");
+
+            var kernels2 = LearnLevel(output1, output_dim1, output_dim1, num_kernels1,
+                NumKernels: 3, BlockDim: 3);
+            var output2 = LevelOutput(kernels2, output1, output_dim1, output_dim1, num_kernels1,
+                NumKernels: 3, BlockDim: 3);
+
+            // Side by side image comparison of input and output.
+            for (int i = 0; i < Rows; i++)
+            {
+                pl.plot(images[i], output1[i], output2[i]);
+            }
+
+            Console.ReadLine();
         }
 
-        static Kernel[] LearnLevel(float[][,,] images, int Width, int Height, int Channels, int NumKernels = 3)
+        static Kernel[] LearnLevel(float[][,,] input, int Width, int Height, int Channels,
+            int NumKernels = 3, int BlockDim = 3)
         {
             int BlockSize = BlockDim * BlockDim * Channels;
 
@@ -96,7 +117,7 @@ namespace Sophonautical
 
             for (int row = 0; row < Rows; row++)
             {
-                var image = images[row];
+                var image = input[row];
 
                 for (int x = 0; x < Width - (BlockDim - 1); x++)
                 for (int y = 0; y < Height - (BlockDim - 1); y++)
@@ -129,19 +150,21 @@ namespace Sophonautical
             return Kernels;
         }
 
-        static float[][,,] LevelOutput(Kernel[] Kernels, float[][,,] images, int Width, int Height, int Channels, int NumKernels = 3)
+        static float[][,,] LevelOutput(Kernel[] Kernels, float[][,,] input, int Width, int Height, int Channels,
+            int NumKernels = 3, int BlockDim = 3)
         {
             int BlockSize = BlockDim * BlockDim * Channels;
 
             // Construct level 1 output
-            var _images = new float[Rows][,,];
-            var _image_dim = Width - (BlockDim - 1);
-            var input = new float[BlockSize];
+            var output = new float[Rows][,,];
+            var output_dim = Width - (BlockDim - 1);
+            var block = new float[BlockSize];
 
             for (int row = 0; row < Rows; row++)
             {
-                var image = images[row];
-                var _image = new float[_image_dim, _image_dim, NumKernels];
+                var image = input[row];
+                var _image = new float[output_dim, output_dim, NumKernels];
+                output[row] = _image;
 
                 for (int x = 0; x < Width - (BlockDim - 1); x++)
                 for (int y = 0; y < Height - (BlockDim - 1); y++)
@@ -151,17 +174,17 @@ namespace Sophonautical
                     for (int _y = y; _y < y + BlockDim; _y++)
                     for (int _c = 0; _c < Channels; _c++)
                     {
-                        input[i++] = (float)image[_x, _y, _c];
+                        block[i++] = (float)image[_x, _y, _c];
                     }
 
                     for (int k = 0; k < NumKernels; k++)
                     {
                         var kernel = Kernels[k];
 
-                        if (kernel.Score(input) < ApplyThreshold)
+                        if (kernel.Score(block) < ApplyThreshold)
                         {
-                            _image[x, y, k] = kernel.Apply(input);
-                            input = kernel.Remainder(input);
+                            _image[x, y, k] = kernel.Apply(block);
+                            block = kernel.Remainder(block);
                         }
                         else
                         {
@@ -169,12 +192,9 @@ namespace Sophonautical
                         }
                     }
                 }
-
-                // Side by side image comparison of input and output.
-                pl.plot(image, _image);
             }
 
-            return _images;
+            return output;
         }
 
         static float TestKernel(float[][] blocks, Kernel kernel, float threshold, int step = 1)
@@ -352,10 +372,9 @@ namespace Sophonautical
                     best_score = score;
                     best_kernel = kernel;
 
-                    Console.WriteLine($"New best {s(best_kernel.w)},{s(best_kernel.b)} with a score of {best_score}.");
+                    //Console.WriteLine($"New best {s(best_kernel.w)},{s(best_kernel.b)} with a score of {best_score}.");
+                    Console.WriteLine($"(Iteration {i}) New best with a score of {best_score}.");
                 }
-
-                //Console.WriteLine($"Iteration {i}: {best_score}, {score}");
             }
 
             return best_kernel;
