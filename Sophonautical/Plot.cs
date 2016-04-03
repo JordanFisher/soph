@@ -2,25 +2,40 @@
 using System.IO;
 using System.Text;
 using System.Diagnostics;
+using System.Collections.Generic;
+using System.Linq;
 
 namespace Sophonautical
 {
     class Plot
     {
         string OutputDir;
+        bool Quiet;
+        bool Save;
+        bool UsePlotNumber = false;
 
-        public Plot(string OutputDir)
+        int PlotCount = 0;
+
+        public Plot(string OutputDir, bool Quiet = false, bool Save = false)
         {
             this.OutputDir = OutputDir;
+            this.Quiet = Quiet;
+            this.Save = Save;
+
+            if (Quiet)
+            {
+                UsePlotNumber = true;
+            }
         }
 
-        void run_cmd(string cmd, string args)
+        void run_python(string file_name, params string[] args)
         {
             ProcessStartInfo start = new ProcessStartInfo();
             start.FileName = "python";
-            start.Arguments = string.Format("{0} {1}", cmd, args);
+            start.Arguments = string.Format("{0} {1}", file_name, string.Join(" ", args));
             start.UseShellExecute = false;
             start.RedirectStandardOutput = true;
+            start.WorkingDirectory = OutputDir;
 
             using (Process process = Process.Start(start))
             {
@@ -34,11 +49,27 @@ namespace Sophonautical
 
         void run_plot(string py)
         {
-            string py_file = Path.Combine(OutputDir, "plot.py");
+            PlotCount++;
 
-            File.WriteAllText(py_file, py);
+            string py_file;
+            if (UsePlotNumber)
+            {
+                py_file = $"plot{PlotCount}.py";
+            }
+            else
+            {
+                py_file = $"plot.py";
+            }
 
-            run_cmd(py_file, "");
+            string full_path = Path.Combine(OutputDir, py_file);
+
+            File.WriteAllText(full_path, py);
+
+            var args = new List<string>();
+            if (Quiet) args.Add("quiet");
+            if (Save) args.Add("save");
+
+            run_python(py_file, args.ToArray());
         }
 
         public string py_array(float[] data)
@@ -102,16 +133,49 @@ namespace Sophonautical
             return s.ToString();
         }
 
+        string indent(string code)
+        {
+            code = code.Replace("\n\r", "\n").Replace("\r\n", "\n");
+
+            var lines = code.Split('\n');
+
+            var indented_code = "";
+            foreach (var line in lines)
+            {
+                indented_code += '\t' + line + '\n';
+            }
+
+            return indented_code;
+        }
+
         string py_plot(string plot)
         {
+            string save_path = "hello.png";
+
+            if (UsePlotNumber)
+            {
+                save_path = $"plot_{PlotCount}.png";
+            }
+
             return string.Format($@"
+import sys
 import numpy as np
 import matplotlib.pyplot as pl
 
-{plot}
+def plot():
+{indent(plot)}
 
-pl.show()
-            ");
+if __name__ == '__main__':
+    plot()
+
+    if 'save' in sys.argv:
+        pl.savefig('{save_path}')
+
+    if not 'quiet' in sys.argv:
+        pl.show()
+"
+
+            );
         }
 
         string line_plot(string data, string plot_ref = "pl")
@@ -119,8 +183,8 @@ pl.show()
             return string.Format($@"
 data = np.array({data})
 
-{plot_ref}.plot(data)
-            ");
+{plot_ref}.plot(data)"
+            );
         }
 
         string image_plot(string data, string plot_ref = "pl")
@@ -141,28 +205,25 @@ data = np.array({data}) / 255.0
             ");
         }
 
-        string multiplot(string plot1, string plot2)
+        string multiplot(params string[] plots)
         {
-            return string.Format($@"
-fig, (pl1, pl2) = pl.subplots(1,2)
+            string pl = "";
 
-{plot1}
+            for (int i = 0; i < plots.Length; i++)
+            {
+                pl += "pl" + (i + 1) + ',';
+            }
 
-{plot2}
+            pl = string.Format($@"
+fig, ({pl}) = pl.subplots(1,{plots.Length})
             ");
-        }
 
-        string multiplot(string plot1, string plot2, string plot3)
-        {
-            return string.Format($@"
-fig, (pl1, pl2, pl3) = pl.subplots(1,3)
+            for (int i = 0; i < plots.Length; i++)
+            {
+                pl += "\n" + plots[i] + "\n";
+            }
 
-{plot1}
-
-{plot2}
-
-{plot3}
-            ");
+            return pl;
         }
 
         public string make_plot(float[] data, string plot_ref = "pl")
@@ -196,35 +257,25 @@ fig, (pl1, pl2, pl3) = pl.subplots(1,3)
             else throw new NotImplementedException();
         }
 
-        public string make_plot(object data1, object data2)
+        public string make_plot(params object[] data)
         {
-            return multiplot(make_plot(data1, plot_ref:"pl1"), make_plot(data2, plot_ref:"pl2"));
+            if (data.Length == 1)
+            {
+                return make_plot(data[0]);
+            }
+
+            string[] plots = new string[data.Length];
+            for (int i = 0; i < data.Length; i++)
+            {
+                plots[i] = make_plot(data[i], plot_ref: "pl" + (i + 1));
+            }
+
+            return multiplot(plots);
         }
 
-        public string make_plot(object data1, object data2, object data3)
-        {
-            return multiplot(
-                make_plot(data1, plot_ref: "pl1"),
-                make_plot(data2, plot_ref: "pl2"),
-                make_plot(data3, plot_ref: "pl3")
-            );
-        }
-
-        public void plot(object data)
+        public void plot(params object[] data)
         {
             string py = py_plot(make_plot(data));
-            run_plot(py);
-        }
-
-        public void plot(object data1, object data2)
-        {
-            string py = py_plot(make_plot(data1, data2));
-            run_plot(py);
-        }
-
-        public void plot(object data1, object data2, object data3)
-        {
-            string py = py_plot(make_plot(data1, data2, data3));
             run_plot(py);
         }
 
@@ -238,6 +289,12 @@ fig, (pl1, pl2, pl3) = pl.subplots(1,3)
 
             // Test RGB image plot.
             plot(new float[,,] { { { 1, 1, 1 }, { 1, 0, 0 } }, { { 0, 1, 0 }, { 0, 0, 1 } } });
+
+            // Test double plot.
+            plot(
+                new float[] { 1, 2, 4, 9, 16, 25 },
+                new float[,,] { { { 1, 1, 1 }, { 1, 0, 0 } }, { { 0, 1, 0 }, { 0, 0, 1 } } }
+            );
         }
     }
 }
