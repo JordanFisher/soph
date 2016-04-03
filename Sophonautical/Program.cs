@@ -54,6 +54,15 @@ namespace Sophonautical
         {
             Test();
 
+            float[][,,] images;
+            byte[] labels;
+
+            Init(out images, out labels);
+            Learn_Multilevel(images, labels);
+        }
+
+        static void Init(out float[][,,] images, out byte[] labels)
+        {
             // Read label meta file.
             var LabelNames = File.ReadAllLines(Path.Combine(TrainingDataDir, LabelFile));
 
@@ -62,8 +71,8 @@ namespace Sophonautical
             Debug.Assert(bytes.Length == Rows * RowSize);
 
             // Unpack training data.
-            var images = new float[Rows][,,];
-            var labels = new byte[Rows];
+            images = new float[Rows][,,];
+            labels = new byte[Rows];
             var source_index = 0;
 
             for (int row = 0; row < Rows; row++)
@@ -103,7 +112,10 @@ namespace Sophonautical
             }
 
             Debug.Assert(source_index == Rows * RowSize);
+        }
 
+        static void Learn_Multilevel(float[][,,] images, byte[] labels)
+        {
             Console.WriteLine("\n\nLearning level 1\n\n");
 
             int block_dim1 = 5, num_kernels1 = 12;
