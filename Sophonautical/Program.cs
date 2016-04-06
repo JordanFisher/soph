@@ -58,7 +58,9 @@ namespace Sophonautical
             byte[] labels;
 
             Init(out images, out labels);
-            Learn_Multilevel(images, labels);
+
+            Learn_SupervisedKernelHG(images, labels);
+            //Learn_Multilevel(images, labels);
         }
 
         static void Init(out float[][,,] images, out byte[] labels)
@@ -112,6 +114,95 @@ namespace Sophonautical
             }
 
             Debug.Assert(source_index == Rows * RowSize);
+        }
+
+        static float[][][] GetBlocks(float[][,,] inputs, int Rows, int Width, int Height, int Channels, int BlockDim)
+        {
+            int BlockSize = BlockDim * BlockDim * Channels;
+
+            // Unpack blocks.
+            int num_blocks = (Width - (BlockDim - 1)) * (Height - (BlockDim - 1));
+            var blocks = new float[Rows][][];
+
+            for (int row = 0; row < Rows; row++)
+            {
+                var input = inputs[row];
+                blocks[row] = new float[num_blocks][];
+
+                int block_index = 0;
+                for (int x = 0; x < Width - (BlockDim - 1); x++)
+                for (int y = 0; y < Height - (BlockDim - 1); y++)
+                {
+                    var block = blocks[row][block_index] = new float[BlockSize];
+                    block_index++;
+
+                    int i = 0;
+                    for (int _x = x; _x < x + BlockDim; _x++)
+                    for (int _y = y; _y < y + BlockDim; _y++)
+                    for (int _c = 0; _c < Channels; _c++)
+                    {
+                        block[i++] = (float)input[_x, _y, _c];
+                    }
+                }
+
+                Debug.Assert(block_index == blocks[row].Length);
+            }
+
+            return blocks;
+        }
+
+        static void Learn_SupervisedKernelHG(float[][,,] images, byte[] labels)
+        {
+            const int BlockDim = 5;
+            const int Channels = 3;
+            const int BlockSize = BlockDim * BlockDim * Channels;
+            var blocks = GetBlocks(images, Rows, Width, Height, Channels: 3, BlockDim: BlockDim);
+
+            Console.WriteLine("\n\nSearching for kernels via supervised hypothesis generation\n\n");
+            const int NumKernels = 100000;
+
+            float best_score = 0;
+            AffineKernel best_kernel = null;
+            for (int i = 0; i < NumKernels; i++)
+            {
+                var kernel = new AffineKernel(BlockSize);
+
+                int w_index, b_index;
+                do w_index = rnd.Next(0, blocks.Length - 1); while (labels[w_index] != 0);
+                do b_index = rnd.Next(0, blocks.Length - 1); while (labels[b_index] != 0);
+                var w_block = blocks[w_index][rnd.Next(0, blocks[w_index].Length)];
+                var b_block = blocks[b_index][rnd.Next(0, blocks[b_index].Length)];
+
+                for (int j = 0; j < BlockSize; j++)
+                {
+                    //kernel.w[j] = (float)rnd.NextDouble();
+                    //kernel.b[j] = (float)rnd.NextDouble();
+
+                    kernel.w[j] = w_block[j] - b_block[j];
+                    kernel.b[j] = b_block[j];
+                    kernel.threshold = .01f + .5f * (float)rnd.NextDouble();
+
+                    //kernel.w[j] = w_block[j];
+                    //kernel.b[j] = 0;
+                }
+
+                Normalize(kernel.w);
+
+                var score = TestKernelWithSources(Rows, blocks, kernel, labels,
+                    //step: 599
+                    //step: 3
+                    step: 1
+                );
+
+                if (score.Item1 > .05f && score.Item2 > best_score)
+                {
+                    best_score = score.Item2;
+                    best_kernel = kernel;
+
+                    Console.WriteLine($"(Iteration {i}) New best with a score of {best_score}, in label ratio of {score.Item1} with a threshold of {score.Item3}.");
+                    best_kernel.Plot();
+                }
+            }
         }
 
         static void Learn_Multilevel(float[][,,] images, byte[] labels)
@@ -338,7 +429,7 @@ namespace Sophonautical
             for (int i = 0; i < 1000; i++)
             {
                 float threshold = .01f + .14f * (float)rnd.NextDouble();
-                var result = TestThreshold(source_score, source_label, threshold);
+                var result = TestThreshold(kernel, source_score, source_label, threshold);
 
                 if (result.Item1 > .05f && result.Item2 > best_ratio || best_ratio < 0)
                 {
@@ -347,12 +438,50 @@ namespace Sophonautical
                     best_threshold = threshold;
                 }
             }
-            TestThreshold(source_score, source_label, best_threshold, verbose: true);
+            TestThreshold(kernel, source_score, source_label, best_threshold, verbose: true);
 
             return new Tuple<float, float, float>(best_in_ratio, best_ratio, best_threshold);
         }
 
-        private static Tuple<float, float> TestThreshold(float[] source_score, byte[] source_label, float threshold, bool verbose = false)
+        static Tuple<float, float, float> TestKernelWithSources(int Rows, float[][][] blocks, Kernel kernel, byte[] labels,
+            int step = 1)
+        {
+            float[] source_score = new float[Rows];
+            float default_error = 9999999;
+            for (int i = 0; i < Rows; i++) source_score[i] = default_error;
+
+            for (int source = rnd.Next(step); source < blocks.Length; source += step)
+            {
+                var _blocks = blocks[source];
+
+                for (int j = 0; j < _blocks.Length; j++)
+                {
+                    var block = _blocks[j];
+
+                    float error = kernel.Score(block);
+                    source_score[source] = Math.Min(source_score[source], error);
+                }
+            }
+
+            float best_threshold = -1, best_ratio = -1, best_in_ratio = -1;
+            for (int i = 0; i < 1000; i++)
+            {
+                float threshold = .01f + .14f * (float)rnd.NextDouble();
+                var result = TestThreshold(kernel, source_score, labels, threshold);
+
+                if (result.Item1 > .05f && result.Item2 > best_ratio || best_ratio < 0)
+                {
+                    best_in_ratio = result.Item1;
+                    best_ratio = result.Item2;
+                    best_threshold = threshold;
+                }
+            }
+            TestThreshold(kernel, source_score, labels, best_threshold, verbose: true);
+
+            return new Tuple<float, float, float>(best_in_ratio, best_ratio, best_threshold);
+        }
+
+        private static Tuple<float, float> TestThreshold(Kernel kernel, float[] source_score, byte[] source_label, float threshold, bool verbose = false)
         {
             int in_count = 0, in_total = 0, out_count = 0, out_total = 0;
 
@@ -375,12 +504,12 @@ namespace Sophonautical
                 }
             }
 
-            float in_ratio = in_count / (float)in_total;
-            float out_ratio = out_count / (float)out_total;
+            float in_ratio = in_count / ((float)in_total + .001f);
+            float out_ratio = out_count / ((float)out_total + .001f);
 
             if (verbose)
             {
-                Console.WriteLine($"  - in label {in_count} / {in_total}  - out label {out_count} / {out_total}  - threshold {threshold}");
+                Console.WriteLine($"  - in label {in_count} / {in_total}  - out label {out_count} / {out_total}  - error threshold {threshold:0.0000}  - {kernel.ShortDescription()}");
             }
 
             return new Tuple<float, float>(in_ratio, in_ratio / out_ratio);
@@ -463,6 +592,8 @@ namespace Sophonautical
             public abstract float Apply(float[] input);
             public abstract float[] Inverse(float y);
             public abstract void Plot();
+
+            public abstract string ShortDescription();
         }
 
         class AffineKernel : Kernel
@@ -476,6 +607,14 @@ namespace Sophonautical
             {
                 w = new float[BlockSize];
                 b = new float[BlockSize];
+            }
+
+            public override float Score(float[] input)
+            {
+                var remainder = Remainder(input);
+                var error = Norm1Thresh(remainder, threshold: threshold) / input.Length;
+
+                return error;
             }
 
             public override float Apply(float[] input)
@@ -519,6 +658,11 @@ namespace Sophonautical
             {
                 return $"{s(w)},{s(b)}";
             }
+
+            public override string ShortDescription()
+            {
+                return $"l1thresh {threshold:0.0000}";
+            }
         }
 
         static AffineKernel FindKernel(float[][] blocks, int BlockSize, byte[] labels = null, int[] sources = null, bool use_labels = false)
@@ -539,7 +683,7 @@ namespace Sophonautical
 
                     kernel.w[j] = blocks[w_index][j] - blocks[b_index][j];
                     kernel.b[j] = blocks[b_index][j];
-                    kernel.threshold = .01f + .14f * (float)rnd.NextDouble();
+                    kernel.threshold = .01f + .5f * (float)rnd.NextDouble();
 
                     //kernel.w[j] = blocks[w_index][j];
                     //kernel.b[j] = 0;
