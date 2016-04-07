@@ -200,11 +200,7 @@ namespace Sophonautical
 
                 Normalize(kernel.w);
 
-                var score = TestKernelWithSources(Rows, blocks, kernel, labels,
-                    //step: 599
-                    //step: 3
-                    step: 1
-                );
+                var score = TestKernelWithSources(Rows, blocks, kernel, labels, step: 1);
 
                 if (score.Item1 > .05f && score.Item2 > best_score)
                 {
@@ -441,7 +437,7 @@ namespace Sophonautical
             for (int i = 0; i < 1000; i++)
             {
                 float threshold = .01f + .14f * (float)rnd.NextDouble();
-                var result = TestThreshold(kernel, source_score, source_label, threshold);
+                var result = TestThreshold(Rows, kernel, source_score, source_label, threshold);
 
                 if (result.Item1 > .05f && result.Item2 > best_ratio || best_ratio < 0)
                 {
@@ -450,17 +446,17 @@ namespace Sophonautical
                     best_threshold = threshold;
                 }
             }
-            TestThreshold(kernel, source_score, source_label, best_threshold, verbose: true);
+            TestThreshold(Rows, kernel, source_score, source_label, best_threshold, verbose: true);
 
             return new Tuple<float, float, float>(best_in_ratio, best_ratio, best_threshold);
         }
 
         static Tuple<float, float, float> TestKernelWithSources(int Rows, float[][][] blocks, Kernel kernel, byte[] labels,
-            int step = 1)
+            int step = 1, int offset = 0)
         {
             float[] source_score = new float[Rows];
             float default_error = 9999999;
-            for (int i = 0; i < Rows; i++) source_score[i] = default_error;
+            for (int i = offset; i < offset + Rows; i++) source_score[i] = default_error;
 
             for (int source = rnd.Next(step); source < blocks.Length; source += step)
             {
@@ -479,7 +475,7 @@ namespace Sophonautical
             for (int i = 0; i < 1000; i++)
             {
                 float threshold = .01f + .14f * (float)rnd.NextDouble();
-                var result = TestThreshold(kernel, source_score, labels, threshold);
+                var result = TestThreshold(Rows, kernel, source_score, labels, threshold, offset: offset);
 
                 if (result.Item1 > .05f && result.Item2 > best_ratio || best_ratio < 0)
                 {
@@ -488,16 +484,22 @@ namespace Sophonautical
                     best_threshold = threshold;
                 }
             }
-            TestThreshold(kernel, source_score, labels, best_threshold, verbose: true);
+            TestThreshold(Rows, kernel, source_score, labels, best_threshold, verbose: true, offset: offset);
+
+            Console.WriteLine("(");
+            TestThreshold(Rows/2, kernel, source_score, labels, best_threshold, verbose: true, offset: 0);
+            TestThreshold(Rows/2, kernel, source_score, labels, best_threshold, verbose: true, offset: Rows/2);
+            Console.WriteLine(")");
 
             return new Tuple<float, float, float>(best_in_ratio, best_ratio, best_threshold);
         }
 
-        private static Tuple<float, float> TestThreshold(Kernel kernel, float[] source_score, byte[] source_label, float threshold, bool verbose = false)
+        private static Tuple<float, float> TestThreshold(int Rows, Kernel kernel, float[] source_score, byte[] source_label, float threshold,
+            bool verbose = false, int offset = 0)
         {
             int in_count = 0, in_total = 0, out_count = 0, out_total = 0;
 
-            for (int i = 0; i < Rows; i++)
+            for (int i = offset; i < offset + Rows; i++)
             {
                 var label = source_label[i];
                 var error = source_score[i];
