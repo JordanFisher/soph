@@ -1,7 +1,6 @@
 ﻿using System;
 using System.IO;
 using System.Diagnostics;
-using System.Collections.Generic;
 
 using static Sophonautical.Util;
 
@@ -59,7 +58,8 @@ namespace Sophonautical
 
             Init(out images, out labels);
 
-            Learn_SupervisedKernelHG(images, labels);
+            //Learn_SupervisedKernelHG(Rows, images, labels);
+            Learn_SupervisedKernelHG(2000, images, labels);
             //Learn_Multilevel(images, labels);
         }
 
@@ -142,17 +142,17 @@ namespace Sophonautical
                     block_index++;
 
                     int i = 0;
-                    for (int _x = x; _x < x + BlockDim; _x++)
-                    for (int _y = y; _y < y + BlockDim; _y++)
+                    for (int _x = 0; _x < BlockDim; _x++)
+                    for (int _y = 0; _y < BlockDim; _y++)
                     for (int _c = 0; _c < Channels; _c++)
                     {
-                        if      (mirror == 0) block[i++] = (float)input[_x, _y, _c];
-                        else if (mirror == 1) block[i++] = (float)input[x + BlockDim - 1 - _x, _y, _c];
-                        else if (mirror == 2) block[i++] = (float)input[_x, y + BlockDim - 1 - _y, _c];
+                        if      (mirror == 0) block[i++] = (float)input[x + _x, y + _y, _c];
+                        else if (mirror == 1) block[i++] = (float)input[x + BlockDim - 1 - _x, y + _y, _c];
+                        else if (mirror == 2) block[i++] = (float)input[x + _x, y + BlockDim - 1 - _y, _c];
                         else if (mirror == 3) block[i++] = (float)input[x + BlockDim - 1 - _x, y + BlockDim - 1 - _y, _c];
-                        else if (mirror == 4) block[i++] = (float)input[_y, _x, _c];
-                        else if (mirror == 5) block[i++] = (float)input[y + BlockDim - 1 - _y, _x, _c];
-                        else if (mirror == 6) block[i++] = (float)input[_y, x + BlockDim - 1 - _x, _c];
+                        else if (mirror == 4) block[i++] = (float)input[y + _y, x + _x, _c];
+                        else if (mirror == 5) block[i++] = (float)input[y + BlockDim - 1 - _y, x + _x, _c];
+                        else if (mirror == 6) block[i++] = (float)input[y + _y, x + BlockDim - 1 - _x, _c];
                         else if (mirror == 7) block[i++] = (float)input[y + BlockDim - 1 - _y, x + BlockDim - 1 - _x, _c];
                     }
                 }
@@ -163,18 +163,19 @@ namespace Sophonautical
             return blocks;
         }
 
-        static void Learn_SupervisedKernelHG(float[][,,] images, byte[] labels)
+        static void Learn_SupervisedKernelHG(int Rows, float[][,,] images, byte[] labels)
         {
             const int BlockDim = 5;
             const int Channels = 3;
             const int BlockSize = BlockDim * BlockDim * Channels;
-            var blocks = GetBlocks(images, Rows, Width, Height, Channels: 3, BlockDim: BlockDim, AddMirrors: false);
+            var blocks = GetBlocks(images, Rows, Width, Height, Channels: 3, BlockDim: BlockDim, AddMirrors: true);
 
             Console.WriteLine("\n\nSearching for kernels via supervised hypothesis generation\n\n");
             const int NumKernels = 100000;
 
             float best_score = 0;
             AffineKernel best_kernel = null;
+            
             for (int i = 0; i < NumKernels; i++)
             {
                 var kernel = new AffineKernel(BlockSize);
@@ -486,10 +487,10 @@ namespace Sophonautical
             }
             TestThreshold(Rows, kernel, source_score, labels, best_threshold, verbose: true, offset: offset);
 
-            Console.WriteLine("(");
-            TestThreshold(Rows/2, kernel, source_score, labels, best_threshold, verbose: true, offset: 0);
-            TestThreshold(Rows/2, kernel, source_score, labels, best_threshold, verbose: true, offset: Rows/2);
-            Console.WriteLine(")");
+            //Console.WriteLine("(");
+            //TestThreshold(Rows/2, kernel, source_score, labels, best_threshold, verbose: true, offset: 0);
+            //TestThreshold(Rows/2, kernel, source_score, labels, best_threshold, verbose: true, offset: Rows/2);
+            //Console.WriteLine(")");
 
             return new Tuple<float, float, float>(best_in_ratio, best_ratio, best_threshold);
         }
