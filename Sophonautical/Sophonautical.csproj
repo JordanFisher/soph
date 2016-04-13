@@ -65,6 +65,7 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="Deep-Unsupervised-Kernel-Search.cs" />
     <Compile Include="Plot.cs" />
     <Compile Include="Util.cs" />
     <Compile Include="Program.cs" />
