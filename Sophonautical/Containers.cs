@@ -13,7 +13,7 @@ namespace Sophonautical
             public float[,,] Pixels;
         }
 
-        public class LabledImage
+        public class LabeledImage
         {
             public float[,,] Pixels;
             public byte Label;
@@ -25,14 +25,14 @@ namespace Sophonautical
             public byte Label;
             public float[][] Blocks;
 
-            public BlockedImage(LabledImage image)
+            public BlockedImage(LabeledImage image)
             {
                 this.Pixels = image.Pixels;
                 this.Label = image.Label;
             }
         }
 
-        public static float[][,,] get_pixels(LabledImage[] images)
+        public static float[][,,] get_pixels(LabeledImage[] images)
         {
             var pixels = new float[images.Length][,,];
             for (int i = 0; i < images.Length; i++)

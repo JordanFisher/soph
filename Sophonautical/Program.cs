@@ -36,7 +36,7 @@ namespace Sophonautical
         {
             Startup(); Test();
 
-            LabledImage[] images = Init();
+            LabeledImage[] images = Init();
 
             //Parallel.For(0, NumKernels, i =>
             SupervisedHypothesisGeneration.Learn_SupervisedKernelHG_Staged(Rows, images, InLabel: 0);

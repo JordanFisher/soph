@@ -11,32 +11,14 @@ namespace Sophonautical
 {
     public class SupervisedHypothesisGeneration
     {
-        public static void Learn_SupervisedKernelHG_Staged(int Rows, LabledImage[] images,
+        public static void Learn_SupervisedKernelHG_Staged(int Rows, LabeledImage[] images,
             int InLabel = 0)
         {
             // Select smaller set to generate leads with.
             const int LeadSize = 200;
             const int InLabelSize = LeadSize / 2;
-            const int OutLabelSize = LeadSize - InLabelSize;
 
-            LabledImage[] LeadSet = new LabledImage[LeadSize];
-
-            int RemainderSize = Rows - LeadSize;
-            float[][,,] RemainderSet = new float[RemainderSize][,,];
-            byte[] RemainderLabels = new byte[RemainderSize];
-
-            int lead_index = 0, source_index = rnd.Next(0, Rows);
-            while (lead_index < LeadSize)
-            {
-                source_index++; if (source_index >= Rows) source_index = 0;
-
-                if (lead_index < InLabelSize && images[source_index].Label == InLabel ||
-                    lead_index >= InLabelSize && images[source_index].Label != InLabel)
-                {
-                    LeadSet[lead_index] = images[source_index];
-                    lead_index++;
-                }
-            }
+            LabeledImage[] LeadSet = SampleSet(Rows, images, InLabel, LeadSize, InLabelSize);
 
             // Get list of candidate kernels from the lead set.
             var list = Learn_SupervisedKernelHG(LeadSize, LeadSet, InLabelMinRatio: 0.2f, SearchLength: 1000);
@@ -66,7 +48,7 @@ namespace Sophonautical
             }
         }
 
-        static List<Tuple<AffineKernel, float>> Learn_SupervisedKernelHG(int Rows, LabledImage[] images,
+        static List<Tuple<AffineKernel, float>> Learn_SupervisedKernelHG(int Rows, LabeledImage[] images,
             int InLabel = 0, float InLabelMinRatio = 0.05f, int SearchLength = 1000000, int preferred_source = -1)
         {
             const int BlockDim = 5;
@@ -150,40 +132,6 @@ namespace Sophonautical
             return kernel;
         }
 
-        static Tuple<float, float> TestKernelWithLabels(float[][] blocks, Kernel kernel, byte[] labels,
-            float threshold, int step = 1)
-        {
-            int
-                in_count = 0, in_total = 0,
-                out_count = 0, out_total = 0;
-
-            for (int i = rnd.Next(step); i < blocks.Length; i += step)
-            {
-                var block = blocks[i];
-                var label = labels[i];
-
-                float error = kernel.Score(block);
-
-                if (label == 0)
-                {
-                    in_total++;
-
-                    if (error < threshold) in_count++;
-                }
-                else
-                {
-                    out_total++;
-
-                    if (error < threshold) out_count++;
-                }
-            }
-
-            float in_ratio = in_count / (float)in_total;
-            float out_ratio = out_count / (float)out_total;
-
-            return new Tuple<float, float>(in_ratio, in_ratio / out_ratio);
-        }
-
         static Tuple<float, float, float> TestKernelWithSources(int Rows, BlockedImage[] blocks, Kernel kernel, int InLabel,
             float InLabelMinRatio = 0.05f, int step = 1, int offset = 0, bool verbose = false)
         {
@@ -230,11 +178,6 @@ namespace Sophonautical
             }
 
             return new Tuple<float, float, float>(best_in_ratio, best_ratio, best_threshold);
-        }
-
-        struct LabelRatioPerformance
-        {
-            float InRatio, Ratio, Threshold;
         }
 
         private static Tuple<float, float> TestThreshold(int Rows, Kernel kernel, float[] source_score, byte[] source_label, float threshold, int InLabel,

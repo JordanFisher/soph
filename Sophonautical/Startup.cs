@@ -27,7 +27,7 @@ namespace Sophonautical
             rnd = new Random(1);
         }
 
-        public static LabledImage[] Init()
+        public static LabeledImage[] Init()
         {
             // Read label meta file.
             var LabelNames = File.ReadAllLines(Path.Combine(TrainingDataDir, LabelFile));
@@ -37,12 +37,12 @@ namespace Sophonautical
             Debug.Assert(bytes.Length == Rows * RowSize);
 
             // Unpack training data.
-            LabledImage[] images = new LabledImage[Rows];
+            LabeledImage[] images = new LabeledImage[Rows];
             var source_index = 0;
 
             for (int row = 0; row < Rows; row++)
             {
-                var image = images[row] = new LabledImage();
+                var image = images[row] = new LabeledImage();
                 var pixels = image.Pixels = new float[Width, Height, 3];
 
                 image.Label = bytes[source_index++];
@@ -83,7 +83,7 @@ namespace Sophonautical
             return images;
         }
 
-        public static BlockedImage[] GetBlocks(LabledImage[] inputs, int Rows, int Width, int Height, int Channels,
+        public static BlockedImage[] GetBlocks(LabeledImage[] inputs, int Rows, int Width, int Height, int Channels,
             int BlockDim, bool AddMirrors = false)
         {
             int BlockSize = BlockDim * BlockDim * Channels;
