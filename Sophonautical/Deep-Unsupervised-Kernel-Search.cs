@@ -9,18 +9,22 @@ using static Sophonautical.Util;
 
 namespace Sophonautical
 {
-    public partial class Program
+    public class DeepUnsupervisedKernelSearch
     {
-        static void Learn_Multilevel(float[][,,] images)
+        const float
+            GroupThreshold = .075f,
+            ApplyThreshold = 10 * GroupThreshold;
+
+        static void Learn_Multilevel(int Rows, float[][,,] images, int Width, int Height)
         {
             Console.WriteLine("\n\nLearning level 1\n\n");
 
             int block_dim1 = 5, num_kernels1 = 12;
             var output_dim1 = Width - (block_dim1 - 1);
 
-            var kernels1 = LearnLevel(images, Width, Height, 3,
+            var kernels1 = LearnLevel(Rows, images, Width, Height, 3,
                 NumKernels: num_kernels1, BlockDim: block_dim1);
-            var output1 = LevelOutput(kernels1, images, Width, Height, 3,
+            var output1 = LevelOutput(Rows, kernels1, images, Width, Height, 3,
                 NumKernels: num_kernels1, BlockDim: block_dim1);
             NormalizeComponents(output1, Rows, output_dim1, output_dim1, num_kernels1);
 
@@ -29,9 +33,9 @@ namespace Sophonautical
             int block_dim2 = 3, num_kernels2 = 6;
             var output_dim2 = output_dim1 - (block_dim2 - 1);
 
-            var kernels2 = LearnLevel(output1, output_dim1, output_dim1, num_kernels1,
+            var kernels2 = LearnLevel(Rows, output1, output_dim1, output_dim1, num_kernels1,
                 NumKernels: num_kernels2, BlockDim: block_dim2);
-            var output2 = LevelOutput(kernels2, output1, output_dim1, output_dim1, num_kernels1,
+            var output2 = LevelOutput(Rows, kernels2, output1, output_dim1, output_dim1, num_kernels1,
                 NumKernels: num_kernels2, BlockDim: block_dim2);
             NormalizeComponents(output2, Rows, output_dim2, output_dim2, num_kernels2);
 
@@ -40,9 +44,9 @@ namespace Sophonautical
             int block_dim3 = 3, num_kernels3 = 3;
             var output_dim3 = output_dim2 - (block_dim3 - 1);
 
-            var kernels3 = LearnLevel(output2, output_dim2, output_dim2, num_kernels2,
+            var kernels3 = LearnLevel(Rows, output2, output_dim2, output_dim2, num_kernels2,
                 NumKernels: num_kernels3, BlockDim: block_dim3);
-            var output3 = LevelOutput(kernels3, output2, output_dim2, output_dim2, num_kernels2,
+            var output3 = LevelOutput(Rows, kernels3, output2, output_dim2, output_dim2, num_kernels2,
                 NumKernels: num_kernels3, BlockDim: block_dim3);
             NormalizeComponents(output3, Rows, output_dim3, output_dim3, num_kernels3);
 
@@ -55,7 +59,7 @@ namespace Sophonautical
             Console.ReadLine();
         }
 
-        static Kernel[] LearnLevel(float[][,,] input, int Width, int Height, int Channels,
+        static Kernel[] LearnLevel(int Rows, float[][,,] input, int Width, int Height, int Channels,
             int NumKernels = 3, int BlockDim = 3)
         {
             int BlockSize = BlockDim * BlockDim * Channels;
@@ -107,7 +111,7 @@ namespace Sophonautical
             return Kernels;
         }
 
-        static float[][,,] LevelOutput(Kernel[] Kernels, float[][,,] input, int Width, int Height, int Channels,
+        static float[][,,] LevelOutput(int Rows, Kernel[] Kernels, float[][,,] input, int Width, int Height, int Channels,
             int NumKernels = 3, int BlockDim = 3)
         {
             int BlockSize = BlockDim * BlockDim * Channels;
@@ -215,6 +219,58 @@ namespace Sophonautical
             }
 
             return best_kernel;
+        }
+
+        static float[][] SetRemainder(float[][] blocks, Kernel kernel, float threshold, byte[] labels = null)
+        {
+            int NumLabels = labels == null ? 0 : labels.Length;
+
+            bool[] in_remainder = new bool[blocks.Length];
+            int[] label_count = new int[NumLabels];
+
+            int count = 0;
+            for (int i = 0; i < blocks.Length; i++)
+            {
+                var block = blocks[i];
+
+                float error = kernel.Score(block);
+                if (error > threshold)
+                {
+                    in_remainder[i] = true;
+                    count++;
+                }
+                else
+                {
+                    in_remainder[i] = false;
+                    if (labels != null) label_count[labels[i]]++;
+                }
+            }
+
+            var remainder = new float[count][];
+            count = 0;
+            for (int i = 0; i < blocks.Length; i++)
+            {
+                if (in_remainder[i])
+                {
+                    remainder[count] = kernel.Remainder(blocks[i]);
+                    count++;
+                }
+            }
+
+            Debug.Assert(remainder.Length == count);
+            float percent = 100 * remainder.Length / (float)blocks.Length;
+            Console.WriteLine(
+                $"\nRemainder: {remainder.Length} items out of {blocks.Length}, {percent}%.\n"
+            );
+
+            if (labels != null)
+            {
+                string s = "Label distribution among well fit: ";
+                for (int i = 0; i < NumLabels; i++) s += (float)label_count[i] / (float)(blocks.Length - remainder.Length) + ", ";
+                Console.WriteLine(s + '\n');
+            }
+
+            return remainder;
         }
     }
 }

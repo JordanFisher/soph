@@ -65,8 +65,12 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="Startup.cs" />
+    <Compile Include="Kernels.cs" />
     <Compile Include="Deep-Unsupervised-Kernel-Search.cs" />
+    <Compile Include="Supervised-Hypothesis-Generation.cs" />
     <Compile Include="Plot.cs" />
+    <Compile Include="Containers.cs" />
     <Compile Include="Util.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />

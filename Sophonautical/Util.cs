@@ -38,10 +38,12 @@ namespace Sophonautical
         public static Vector operator /(Vector x, float y) { return Util.scalar_div(x.vals, y); }
     }
 
-    class Util
+    public partial class Util
     {
+        public static Plot pl = new Plot("");
+        public static Random rnd = new Random(1);
+
         public const float eps = .00001f;
-        static Plot pl = new Plot("");
 
         public static void Timeit(Action a, string description)
         {

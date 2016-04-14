@@ -7,7 +7,7 @@ using System.Linq;
 
 namespace Sophonautical
 {
-    class Plot
+    public class Plot
     {
         string OutputDir;
         bool Quiet;
