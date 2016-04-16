@@ -10,6 +10,8 @@ namespace Sophonautical
 {
     public abstract class Kernel
     {
+        public float ClassificationCutoff = 1;
+
         public virtual float Score(float[] input)
         {
             var remainder = Remainder(input);
@@ -104,7 +106,7 @@ namespace Sophonautical
 
         public override string ShortDescription()
         {
-            return $"l1thresh {threshold:0.0000}";
+            return $"l1thresh {threshold:0.0000}  class-threh {ClassificationCutoff:0.0000}";
         }
     }
 }

@@ -11,17 +11,23 @@ namespace Sophonautical
 {
     public class SupervisedHypothesisGeneration
     {
-        public static void Learn_SupervisedKernelHG_Staged(int Rows, LabeledImage[] images,
+        public static void SupervisedKernelHg(int Rows, LabeledImage[] images,
             int InLabel = 0)
         {
+            // Select training set and test set.
+            const int TrainingSize = 9000;
+            int TestSize = Rows - TrainingSize;
+            var TrainingSet = Subset(Rows, images, TrainingSize);
+            var TestSet = Remainder(images, TrainingSet);
+
             // Select smaller set to generate leads with.
-            const int LeadSize = 200;
+            const int LeadSize = 2000;
             const int InLabelSize = LeadSize / 2;
 
-            LabeledImage[] LeadSet = SampleSet(Rows, images, InLabel, LeadSize, InLabelSize);
+            LabeledImage[] LeadSet = SampleSet(TrainingSize, TrainingSet, InLabel, LeadSize, InLabelSize);
 
             // Get list of candidate kernels from the lead set.
-            var list = Learn_SupervisedKernelHG(LeadSize, LeadSet, InLabelMinRatio: 0.2f, SearchLength: 1000);
+            var list = Learn_SupervisedKernelHg(LeadSize, LeadSet, InLabelMinRatio: 0.2f, SearchLength: 40);
             list.Sort((kernelScore1, kernelScore2) => kernelScore2.Item2.CompareTo(kernelScore1.Item2));
 
             foreach (var kernelScore in list)
@@ -29,26 +35,21 @@ namespace Sophonautical
                 Console.WriteLine($"{kernelScore.Item2}");
             }
 
-            // Test candidates on bigger test set.
+            // Test candidates on test set.
             const int BlockDim = 5;
-            var blocks = GetBlocks(images, Rows / 10, Width, Height, Channels: 3, BlockDim: BlockDim, AddMirrors: true);
+            var blocks = GetBlocks(TestSet, TestSize, Width, Height, Channels: 3, BlockDim: BlockDim, AddMirrors: true);
 
             foreach (var kernel in list)
             {
-                //Console.WriteLine("!!!");
-                //int w_index = 0; do w_index = rnd.Next(0, blocks.Length - 1); while (labels[w_index] != InLabel);
-                //var w_block = blocks[w_index][rnd.Next(0, blocks[w_index].Length)];
-                //var _kernel = (AffineKernel)FormHypothesis(blocks[0][0].Length, w_block, list[1].Item1.b);
-                //var score = TestKernelWithSources(Rows / 10, blocks, _kernel, labels,
-                //    InLabel: InLabel, step: 1, InLabelMinRatio: 0.05f, verbose: true);
+                //var score = OptimizeKernelCutoff(TrainingSize, blocks, kernel.Item1, InLabel: InLabel, InLabelMinRatio: 0.05f);
+                //Console.WriteLine($"Score is {score}");
 
-                var score = TestKernelWithSources(Rows / 10, blocks, kernel.Item1,
-                    InLabel: InLabel, step: 1, InLabelMinRatio: 0.05f, verbose: true);
-                Console.WriteLine($"Score is {score}");
+                var result = GetScoreStats(TestSize, blocks, kernel.Item1, InLabel);
+                Console.WriteLine($"Score is {result.InOutHitRatio} with an in ratio of {result.InHitRatio}");
             }
         }
 
-        static List<Tuple<AffineKernel, float>> Learn_SupervisedKernelHG(int Rows, LabeledImage[] images,
+        static List<Tuple<AffineKernel, float>> Learn_SupervisedKernelHg(int Rows, LabeledImage[] images,
             int InLabel = 0, float InLabelMinRatio = 0.05f, int SearchLength = 1000000, int preferred_source = -1)
         {
             const int BlockDim = 5;
@@ -56,7 +57,7 @@ namespace Sophonautical
             const int BlockSize = BlockDim * BlockDim * Channels;
             var blocked_images = GetBlocks(images, Rows, Width, Height, Channels: 3, BlockDim: BlockDim, AddMirrors: true);
 
-            List<Tuple<AffineKernel, float>> list = new List<Tuple<AffineKernel, float>>();
+            var list = new List<Tuple<AffineKernel, float>>();
 
             Console.WriteLine("\n\nSearching for kernels via supervised hypothesis generation\n\n");
 
@@ -84,19 +85,19 @@ namespace Sophonautical
 
                 var kernel = (AffineKernel)FormHypothesis(BlockSize, w_block, b_block);
 
-                var score = TestKernelWithSources(Rows, blocked_images, kernel,
-                    InLabel: InLabel, step: 1, InLabelMinRatio: InLabelMinRatio);
+                var score = OptimizeKernelCutoff(Rows, blocked_images, kernel,
+                    InLabel: InLabel, InLabelMinRatio: InLabelMinRatio);
 
-                if (score.Item1 > InLabelMinRatio)
+                if (score.InHitRatio > InLabelMinRatio)
                 {
-                    list.Add(new Tuple<AffineKernel, float>(kernel, score.Item2));
+                    list.Add(new Tuple<AffineKernel, float>(kernel, score.InOutHitRatio));
 
-                    if (score.Item2 > best_score)
+                    if (score.InOutHitRatio > best_score)
                     {
-                        best_score = score.Item2;
+                        best_score = score.InOutHitRatio;
                         best_kernel = kernel;
 
-                        Console.WriteLine($"(Iteration {i}) New best with a score of {best_score}, in label ratio of {score.Item1} with a threshold of {score.Item3}.");
+                        Console.WriteLine($"(Iteration {i}) New best with a score of {best_score}, in label ratio of {score.InHitRatio} with a threshold of {kernel.ClassificationCutoff}.");
                         best_kernel.Plot();
                     }
                 }
@@ -132,87 +133,121 @@ namespace Sophonautical
             return kernel;
         }
 
-        static Tuple<float, float, float> TestKernelWithSources(int Rows, BlockedImage[] blocks, Kernel kernel, int InLabel,
-            float InLabelMinRatio = 0.05f, int step = 1, int offset = 0, bool verbose = false)
+        static ScoreStats OptimizeKernelCutoff(int Rows, BlockedImage[] blocks, Kernel kernel, int InLabel,
+            float InLabelMinRatio = 0.05f)
         {
-            float[] source_score = new float[Rows];
-            float default_error = 9999999;
-            for (int i = offset; i < offset + Rows; i++) source_score[i] = default_error;
-
-            for (int source = rnd.Next(step); source < blocks.Length; source += step)
-            {
-                var _blocks = blocks[source].Blocks;
-
-                for (int j = 0; j < _blocks.Length; j++)
-                {
-                    var block = _blocks[j];
-
-                    float error = kernel.Score(block);
-                    source_score[source] = Math.Min(source_score[source], error);
-                }
-            }
-
-            float best_threshold = -1, best_ratio = -1, best_in_ratio = -1;
+            float[] source_score = GetScores(Rows, blocks, kernel);
             var labels = get_labels(blocks);
+
+            ScoreStats best = null;
+
             for (int i = 0; i < 1000; i++)
             {
-                float threshold = .01f + .14f * (float)rnd.NextDouble();
-                var result = TestThreshold(Rows, kernel, source_score, labels, threshold, InLabel, offset: offset);
+                float threshold = .001f + .5f * (float)rnd.NextDouble();
+                var result = TestThreshold(Rows, kernel, source_score, labels, threshold, InLabel);
 
-                if (result.Item1 > InLabelMinRatio && result.Item2 > best_ratio || best_ratio < 0)
+                if (best == null || result.InHitRatio > InLabelMinRatio && result.InOutHitRatio > best.InOutHitRatio)
                 {
-                    best_in_ratio = result.Item1;
-                    best_ratio = result.Item2;
-                    best_threshold = threshold;
+                    best = result;
+                    kernel.ClassificationCutoff = threshold;
                 }
             }
-            TestThreshold(Rows, kernel, source_score, labels, best_threshold, InLabel, verbose: true, offset: offset);
 
-            if (verbose)
-            {
-                // Stat breakdown.
-                Console.WriteLine("(");
-                TestThreshold(Rows, kernel, source_score, labels, best_threshold, InLabel, verbose: true, offset: 0, step: 2);
-                TestThreshold(Rows - 1, kernel, source_score, labels, best_threshold, InLabel, verbose: true, offset: 1, step: 2);
-                Console.WriteLine(")");
-            }
-
-            return new Tuple<float, float, float>(best_in_ratio, best_ratio, best_threshold);
+            return best;
         }
 
-        private static Tuple<float, float> TestThreshold(int Rows, Kernel kernel, float[] source_score, byte[] source_label, float threshold, int InLabel,
-            bool verbose = false, int offset = 0, int step = 1)
+        static float GetScore(BlockedImage image, Kernel kernel)
         {
-            int in_count = 0, in_total = 0, out_count = 0, out_total = 0;
+            var blocks = image.Blocks;
+            float score = float.MaxValue;
 
-            for (int i = offset; i < offset + Rows; i += step)
+            for (int i = 0; i < blocks.Length; i++)
+            {
+                var block = blocks[i];
+
+                float error = kernel.Score(block);
+                score = Math.Min(score, error);
+            }
+
+            return score;
+        }
+
+        static float[] GetScores(int Rows, BlockedImage[] images, Kernel kernel)
+        {
+            float[] scores = new float[Rows];
+
+            for (int source = 0; source < images.Length; source++)
+            {
+                scores[source] = GetScore(images[source], kernel);
+            }
+
+            return scores;
+        }
+
+        class ScoreStats
+        {
+            public int InHit = 0, InCount = 0, OutHit = 0, OutCount = 0;
+
+            public float InHitRatio { get { return (float)InHit / ((float)InCount + .001f); } }
+            public float OutHitRatio { get { return (float)OutHit / ((float)OutCount + .001f); } }
+            public float InOutHitRatio { get { return InHitRatio / OutHitRatio; } }
+        }
+
+        static ScoreStats GetScoreStats(int Rows, BlockedImage[] images, Kernel kernel, int InLabel)
+        {
+            var stats = new ScoreStats();
+
+            for (int i = 0; i < Rows; i++)
+            {
+                var image = images[i];
+
+                var error = GetScore(image, kernel);
+
+                if (image.Label == InLabel)
+                {
+                    stats.InCount++;
+
+                    if (error < kernel.ClassificationCutoff) stats.InHit++;
+                }
+                else
+                {
+                    stats.OutCount++;
+
+                    if (error < kernel.ClassificationCutoff) stats.OutHit++;
+                }
+            }
+
+            Console.WriteLine($"  - in label {stats.InHit} / {stats.InCount}  - out label {stats.OutHit} / {stats.OutCount}  - {kernel.ShortDescription()}");
+
+            return stats;
+        }
+
+        static ScoreStats TestThreshold(int Rows, Kernel kernel, float[] source_score, byte[] source_label, float threshold, int InLabel)
+        {
+            var stats = new ScoreStats();
+
+            for (int i = 0; i < Rows; i++)
             {
                 var label = source_label[i];
                 var error = source_score[i];
 
                 if (label == InLabel)
                 {
-                    in_total++;
+                    stats.InCount++;
 
-                    if (error < threshold) in_count++;
+                    if (error < threshold) stats.InHit++;
                 }
                 else
                 {
-                    out_total++;
+                    stats.OutCount++;
 
-                    if (error < threshold) out_count++;
+                    if (error < threshold) stats.OutHit++;
                 }
             }
 
-            float in_ratio = in_count / ((float)in_total + .001f);
-            float out_ratio = out_count / ((float)out_total + .001f);
+            //Console.WriteLine($"  - in label {stats.InHit} / {stats.InCount}  - out label {stats.OutHit} / {stats.OutCount}  - error threshold {threshold:0.0000}  - {kernel.ShortDescription()}");
 
-            if (verbose)
-            {
-                Console.WriteLine($"  - in label {in_count} / {in_total}  - out label {out_count} / {out_total}  - error threshold {threshold:0.0000}  - {kernel.ShortDescription()}");
-            }
-
-            return new Tuple<float, float>(in_ratio, in_ratio / out_ratio);
+            return stats;
         }
     }
 }
