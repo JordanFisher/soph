@@ -38,11 +38,9 @@ namespace Sophonautical
 
             LabeledImage[] images = Init();
 
-            //Parallel.For(0, NumKernels, i =>
-            SupervisedHypothesisGeneration.SupervisedKernelHg(Rows, images, InLabel: 0);
-            //Learn_SupervisedKernelHG(Rows, images, labels);
-            //Learn_SupervisedKernelHG(5000, images, labels);
-            //Learn_SupervisedKernelHG(200, images, labels, InLabelMinRatio: 0.3f);
+            SupervisedHypothesisGeneration.SupervisedKernelHg(Rows, images);
+            //SupervisedHypothesisGeneration.SupervisedKernelHgForLabel(Rows, images, InLabel: 1);
+
             //Learn_Multilevel(images, labels);
 
             Console.ReadLine();

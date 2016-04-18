@@ -72,7 +72,7 @@ namespace Sophonautical
             run_python(py_file, args.ToArray());
         }
 
-        public string py_array(float[] data)
+        public string py_array<T>(T[] data)
         {
             return '[' + string.Join(",", data) + ']';
         }

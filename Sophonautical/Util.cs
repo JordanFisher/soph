@@ -58,7 +58,7 @@ namespace Sophonautical
             Console.WriteLine($"{description}, took {ts.Milliseconds / 100f} ms.");
         }
 
-        public static string s(float[] data) { return pl.py_array(data); }
+        public static string s<T>(T[] data) { return pl.py_array(data); }
         public static string s(float[,] data) { return pl.py_array(data); }
         public static string s(float[,,] data) { return pl.py_array(data); }
 

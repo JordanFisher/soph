@@ -2,6 +2,8 @@
 using System.IO;
 using System.Diagnostics;
 using System.Collections.Generic;
+using System.Linq;
+
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -11,8 +13,7 @@ namespace Sophonautical
 {
     public class SupervisedHypothesisGeneration
     {
-        public static void SupervisedKernelHg(int Rows, LabeledImage[] images,
-            int InLabel = 0)
+        public static void SupervisedKernelHg(int Rows, LabeledImage[] images)
         {
             // Select training set and test set.
             const int TrainingSize = 9000;
@@ -21,13 +22,109 @@ namespace Sophonautical
             var TestSet = Remainder(images, TrainingSet);
 
             // Select smaller set to generate leads with.
-            const int LeadSize = 2000;
+            const int LeadSize = 700;
+            const int InLabelSize = LeadSize / 2;
+
+            var results = Enumerable.Range(0, NumLabels).AsParallel().Select(
+                label => LearnKernelListForLabel(label, TrainingSize, TrainingSet, LeadSize, InLabelSize)
+            ).ToList();
+
+            // Sanity check.
+            //var results = new List<Tuple<int, List<Tuple<AffineKernel, float>>>>();
+            //for (int label = 0; label < NumLabels; label++)
+            //{
+            //    results.Add(new Tuple<int, List<Tuple<AffineKernel, float>>>(label, new List<Tuple<AffineKernel, float>>()));
+            //}
+            //results[0] = LearnKernelListForLabel(0, TrainingSize, TrainingSet, LeadSize, InLabelSize);
+
+            // Sort the results by their label and unpack the tuple so we have
+            // just an array of kernel arrays, indexed by label.
+            results.Sort((list1, list2) => list1.Item1.CompareTo(list2.Item1));
+            var kernel_lists = results.Select(klist => klist.Item2).ToList();
+
+            // Truncate kernel lists so they're all the same length.
+            const int desired_num_kernels = 20;
+            foreach (var kernel_list in kernel_lists)
+            {
+                if (kernel_list.Count > desired_num_kernels)
+                {
+                    kernel_list.RemoveRange(desired_num_kernels, kernel_list.Count - desired_num_kernels);
+                }
+                else
+                {
+                    Console.WriteLine($"Warning! Kernel list only has {kernel_list.Count} kernels, fewer than {desired_num_kernels}");
+                }
+            }
+
+            // Get test blocks.
+            const int BlockDim = 5;
+            var blocked_images = GetBlocks(TestSet, TestSize, Width, Height, Channels: 3, BlockDim: BlockDim, AddMirrors: true);
+
+            // Test the kernel array for a label.
+            for (int label = 0; label < NumLabels; label++)
+            {
+                Console.WriteLine($"Inspecting kernel list for label {label}");
+                var list = kernel_lists[label];
+
+                foreach (var kernelScore in list)
+                {
+                    Console.WriteLine($"{kernelScore.Item2}");
+                }
+
+                foreach (var kernel in list)
+                {
+                    var result = GetScoreStats(TestSize, blocked_images, kernel.Item1, label);
+                    Console.WriteLine($"Score is {result.InOutHitRatio} with an in ratio of {result.InHitRatio}");
+                }
+            }
+
+            // Test candidates on test set.
+            int Right = 0, Wrong = 0;
+            for (int i = 0; i < TestSize; i++)
+            {
+                var image = blocked_images[i];
+                int guess = ClassifyImage(image, kernel_lists);
+
+                if (guess == image.Label)
+                {
+                    Right++;
+                }
+                else
+                {
+                    Wrong++;
+                }
+            }
+            float accuracy = (float)Right / (Right + Wrong);
+            Console.WriteLine($"{Right} right vs {Wrong} wrong, {accuracy*100}%");
+        }
+
+        static Tuple<int, List<Tuple<AffineKernel, float>>> LearnKernelListForLabel(int label, int TrainingSize, LabeledImage[] TrainingSet, int LeadSize, int InLabelSize)
+        {
+            LabeledImage[] LeadSet = SampleSet(TrainingSize, TrainingSet, label, LeadSize, InLabelSize);
+
+            // Get list of candidate kernels from the lead set.
+            var kernel_list = Learn_SupervisedKernelHg(LeadSize, LeadSet, InLabel: label, InLabelMinRatio: 0.2f, SearchLength: 2000);
+            kernel_list.Sort((kernelScore1, kernelScore2) => kernelScore2.Item2.CompareTo(kernelScore1.Item2));
+
+            return new Tuple<int, List<Tuple<AffineKernel, float>>>(label, kernel_list);
+        }
+
+        public static void SupervisedKernelHgForLabel(int Rows, LabeledImage[] images, int InLabel)
+        {
+            // Select training set and test set.
+            const int TrainingSize = 9000;
+            int TestSize = Rows - TrainingSize;
+            var TrainingSet = Subset(Rows, images, TrainingSize);
+            var TestSet = Remainder(images, TrainingSet);
+
+            // Select smaller set to generate leads with.
+            const int LeadSize = 1000;
             const int InLabelSize = LeadSize / 2;
 
             LabeledImage[] LeadSet = SampleSet(TrainingSize, TrainingSet, InLabel, LeadSize, InLabelSize);
 
             // Get list of candidate kernels from the lead set.
-            var list = Learn_SupervisedKernelHg(LeadSize, LeadSet, InLabelMinRatio: 0.2f, SearchLength: 40);
+            var list = Learn_SupervisedKernelHg(LeadSize, LeadSet, InLabel: InLabel, InLabelMinRatio: 0.2f, SearchLength: 50);
             list.Sort((kernelScore1, kernelScore2) => kernelScore2.Item2.CompareTo(kernelScore1.Item2));
 
             foreach (var kernelScore in list)
@@ -41,16 +138,16 @@ namespace Sophonautical
 
             foreach (var kernel in list)
             {
-                //var score = OptimizeKernelCutoff(TrainingSize, blocks, kernel.Item1, InLabel: InLabel, InLabelMinRatio: 0.05f);
-                //Console.WriteLine($"Score is {score}");
-
                 var result = GetScoreStats(TestSize, blocks, kernel.Item1, InLabel);
                 Console.WriteLine($"Score is {result.InOutHitRatio} with an in ratio of {result.InHitRatio}");
+
+                //var score = OptimizeKernelCutoff(TestSize, blocks, kernel.Item1, InLabel: InLabel, InLabelMinRatio: 0.2f);
+                //Console.WriteLine($"Score is {score.InOutHitRatio} with an in ratio of {score.InHitRatio}");
             }
         }
 
-        static List<Tuple<AffineKernel, float>> Learn_SupervisedKernelHg(int Rows, LabeledImage[] images,
-            int InLabel = 0, float InLabelMinRatio = 0.05f, int SearchLength = 1000000, int preferred_source = -1)
+        static List<Tuple<AffineKernel, float>> Learn_SupervisedKernelHg(int Rows, LabeledImage[] images, int InLabel,
+            float InLabelMinRatio = 0.05f, int SearchLength = 1000000, int preferred_source = -1)
         {
             const int BlockDim = 5;
             const int Channels = 3;
@@ -104,6 +201,42 @@ namespace Sophonautical
             }
 
             return list;
+        }
+
+        static int ClassifyImage(BlockedImage image, List<List<Tuple<AffineKernel, float>>> kernel_lists)
+        {
+            var blocks = image.Blocks;
+            float[] hits = new float[NumLabels];
+
+            for (int label = 0; label < NumLabels; label++)
+            {
+                var kernel_list = kernel_lists[label];
+
+                foreach (var kernel in kernel_list)
+                {
+                    float score = GetScore(image, kernel.Item1);
+                    if (score < kernel.Item1.ClassificationCutoff)
+                    {
+                        //hits[i]++;
+                        hits[label] += (float)Math.Log(kernel.Item2);
+                    }
+                }
+            }
+
+            int argmax = -1; float max = 0;
+            for (int label = 0; label < NumLabels; label++)
+            {
+                if (argmax < 0 || hits[label] > max)
+                {
+                    argmax = label;
+                    max = hits[label];
+                }
+            }
+
+            Console.WriteLine($"Hits {s(hits)}");
+            Console.WriteLine($"  Classify as {argmax}, actually a {image.Label}");
+
+            return argmax;
         }
 
         static Kernel FormHypothesis(int BlockSize, float[] w_block, float[] b_block)
