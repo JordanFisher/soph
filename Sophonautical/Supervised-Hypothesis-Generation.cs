@@ -118,13 +118,13 @@ namespace Sophonautical
             var TestSet = Remainder(images, TrainingSet);
 
             // Select smaller set to generate leads with.
-            const int LeadSize = 1000;
+            const int LeadSize = 200;
             const int InLabelSize = LeadSize / 2;
 
             LabeledImage[] LeadSet = SampleSet(TrainingSize, TrainingSet, InLabel, LeadSize, InLabelSize);
 
             // Get list of candidate kernels from the lead set.
-            var list = Learn_SupervisedKernelHg(LeadSize, LeadSet, InLabel: InLabel, InLabelMinRatio: 0.2f, SearchLength: 50);
+            var list = Learn_SupervisedKernelHg(LeadSize, LeadSet, InLabel: InLabel, InLabelMinRatio: 0.2f, SearchLength: 5000);
             list.Sort((kernelScore1, kernelScore2) => kernelScore2.Item2.CompareTo(kernelScore1.Item2));
 
             foreach (var kernelScore in list)
@@ -251,14 +251,14 @@ namespace Sophonautical
                 //kernel.w[j] = (float)rnd.NextDouble();
                 //kernel.b[j] = (float)rnd.NextDouble();
 
-                //kernel.w[j] = w_block[j] - b_block[j];
-                //kernel.b[j] = b_block[j];
+                kernel.w[j] = w_block[j] - b_block[j];
+                kernel.b[j] = b_block[j];
 
                 //kernel.w[j] = w_block[j];
                 //kernel.b[j] = 0;
 
-                kernel.w[j] = 1;
-                kernel.b[j] = b_block[j];
+                //kernel.w[j] = 1;
+                //kernel.b[j] = b_block[j];
             }
 
             Normalize(kernel.w);
@@ -315,15 +315,6 @@ namespace Sophonautical
             }
 
             return scores;
-        }
-
-        class ScoreStats
-        {
-            public int InHit = 0, InCount = 0, OutHit = 0, OutCount = 0;
-
-            public float InHitRatio { get { return (float)InHit / ((float)InCount + .001f); } }
-            public float OutHitRatio { get { return (float)OutHit / ((float)OutCount + .001f); } }
-            public float InOutHitRatio { get { return InHitRatio / OutHitRatio; } }
         }
 
         static ScoreStats GetScoreStats(int Rows, BlockedImage[] images, Kernel kernel, int InLabel)
