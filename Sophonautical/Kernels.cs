@@ -3,6 +3,7 @@ using System.IO;
 using System.Diagnostics;
 using System.Drawing;
 using System.Drawing.Imaging;
+using System.Collections.Generic;
 
 using static Sophonautical.Util;
 
@@ -12,13 +13,15 @@ namespace Sophonautical
     {
         public float ClassificationCutoff = 1;
 
-        public virtual float Score(float[] input)
+        public virtual float Score(float[] input, PostScoreAction action = null)
         {
             var remainder = Remainder(input);
 
             //var error = NormInf(remainder);
             //var error = Norm1(remainder) / input.Length;
             var error = Norm1Thresh(remainder) / input.Length;
+
+            if (action != null) action(this, input, error, remainder);
 
             return error;
         }
@@ -41,7 +44,7 @@ namespace Sophonautical
         public abstract string ShortDescription();
     }
 
-    class AffineKernel : Kernel
+    public class AffineKernel : Kernel
     {
         public float[] w, b;
         public float threshold = 0.5f;
@@ -54,10 +57,12 @@ namespace Sophonautical
             b = new float[BlockSize];
         }
 
-        public override float Score(float[] input)
+        public override float Score(float[] input, PostScoreAction action = null)
         {
             var remainder = Remainder(input);
             var error = Norm1Thresh(remainder, threshold: threshold) / input.Length;
+
+            if (action != null) action(this, input, error, remainder);
 
             return error;
         }

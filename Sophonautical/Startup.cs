@@ -22,8 +22,8 @@ namespace Sophonautical
 
         public static void Startup()
         {
-            //static Plot pl = new Plot(OutputDir, Quiet: false, Save: false);
-            pl = new Plot(OutputDir, Quiet: true, Save: true);
+            pl = new Plot(OutputDir, Quiet: false, Save: true);
+            //pl = new Plot(OutputDir, Quiet: true, Save: true);
             rnd = new Random(1);
         }
 
@@ -54,28 +54,28 @@ namespace Sophonautical
                     pixels[x, y, channel] = bytes[source_index++] / 255f;
                 }
 
-                // Swap out source images for derivatives.
-                var diff = new float[Width, Height, 3];
-                for (int x = 0; x < Width; x++)
-                for (int y = 0; y < Height; y++)
-                {
-                    diff[x, y, 0] = .33333f * (pixels[x, y, 0] + pixels[x, y, 0] + pixels[x, y, 0]);
-                    diff[x, y, 1] = 0;
-                    diff[x, y, 2] = 0;
-                }
-                for (int x = 1; x < Width - 1; x++)
-                for (int y = 1; y < Height - 1; y++)
-                {
-                    diff[x, y, 1] = 10 * (pixels[x + 1, y, 0] - pixels[x, y, 0]);
-                    diff[x, y, 2] = 10 * (pixels[x, y + 1, 0] - pixels[x, y, 0]);
-                }
-                for (int x = 0; x < Width; x++)
-                for (int y = 0; y < Height; y++)
-                {
-                    diff[x, y, 0] = 0;
-                }
+                //// Swap out source images for derivatives.
+                //var diff = new float[Width, Height, 3];
+                //for (int x = 0; x < Width; x++)
+                //for (int y = 0; y < Height; y++)
+                //{
+                //    diff[x, y, 0] = .33333f * (pixels[x, y, 0] + pixels[x, y, 0] + pixels[x, y, 0]);
+                //    diff[x, y, 1] = 0;
+                //    diff[x, y, 2] = 0;
+                //}
+                //for (int x = 1; x < Width - 1; x++)
+                //for (int y = 1; y < Height - 1; y++)
+                //{
+                //    diff[x, y, 1] = 10 * (pixels[x + 1, y, 0] - pixels[x, y, 0]);
+                //    diff[x, y, 2] = 10 * (pixels[x, y + 1, 0] - pixels[x, y, 0]);
+                //}
+                //for (int x = 0; x < Width; x++)
+                //for (int y = 0; y < Height; y++)
+                //{
+                //    diff[x, y, 0] = 0;
+                //}
 
-                images[row].Pixels = diff;
+                //images[row].Pixels = diff;
             }
 
             Debug.Assert(source_index == Rows * RowSize);

@@ -65,6 +65,8 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="Trackers.cs" />
+    <Compile Include="Stats.cs" />
     <Compile Include="Startup.cs" />
     <Compile Include="Kernels.cs" />
     <Compile Include="Deep-Unsupervised-Kernel-Search.cs" />

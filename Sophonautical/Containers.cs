@@ -32,6 +32,12 @@ namespace Sophonautical
             }
         }
 
+        public class LabeledBlock
+        {
+            public byte Label;
+            public float[] Block;
+        }
+
         public static float[][,,] get_pixels(LabeledImage[] images)
         {
             var pixels = new float[images.Length][,,];

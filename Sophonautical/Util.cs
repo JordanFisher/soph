@@ -3,6 +3,7 @@ using System.IO;
 using System.Diagnostics;
 using System.Drawing;
 using System.Drawing.Imaging;
+using System.Collections.Generic;
 
 namespace Sophonautical
 {
@@ -271,6 +272,27 @@ namespace Sophonautical
             {
                 inputs[i][x, y, c] = (inputs[i][x, y, c] - min[c]) / (max[c] - min[c]);
             }
+        }
+
+        public static float[] Average(List<float[]> arrays)
+        {
+            int dim = arrays[0].Length;
+            var avg = new float[dim];
+
+            foreach (var array in arrays)
+            {
+                for (int i = 0; i < dim; i++)
+                {
+                    avg[i] += array[i];
+                }
+            }
+
+            for (int i = 0; i < dim; i++)
+            {
+                avg[i] /= arrays.Count;
+            }
+
+            return avg;
         }
 
         public static void SaveImage(float[,,] image, string name, string dir = "")

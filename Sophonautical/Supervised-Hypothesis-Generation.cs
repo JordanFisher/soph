@@ -124,7 +124,7 @@ namespace Sophonautical
             LabeledImage[] LeadSet = SampleSet(TrainingSize, TrainingSet, InLabel, LeadSize, InLabelSize);
 
             // Get list of candidate kernels from the lead set.
-            var list = Learn_SupervisedKernelHg(LeadSize, LeadSet, InLabel: InLabel, InLabelMinRatio: 0.2f, SearchLength: 5000);
+            var list = Learn_SupervisedKernelHg(LeadSize, LeadSet, InLabel: InLabel, InLabelMinRatio: 0.2f, SearchLength: 50);
             list.Sort((kernelScore1, kernelScore2) => kernelScore2.Item2.CompareTo(kernelScore1.Item2));
 
             foreach (var kernelScore in list)
@@ -138,8 +138,14 @@ namespace Sophonautical
 
             foreach (var kernel in list)
             {
-                var result = GetScoreStats(TestSize, blocks, kernel.Item1, InLabel);
+                var tracker = new BlockTracker();
+                var result = GetScoreStats(TestSize, blocks, kernel.Item1, InLabel, tracker);
                 Console.WriteLine($"Score is {result.InOutHitRatio} with an in ratio of {result.InHitRatio}");
+
+                //pl.plot(Average(tracker.in_remainders), Average(tracker.out_remainders));
+                //pl.plot(Average(tracker.in_blocks), Average(tracker.out_blocks));
+                pl.plot(minus(Average(tracker.in_remainders), Average(tracker.out_remainders)));
+                pl.plot(minus(Average(tracker.in_blocks), Average(tracker.out_blocks)));
 
                 //var score = OptimizeKernelCutoff(TestSize, blocks, kernel.Item1, InLabel: InLabel, InLabelMinRatio: 0.2f);
                 //Console.WriteLine($"Score is {score.InOutHitRatio} with an in ratio of {score.InHitRatio}");
@@ -289,7 +295,7 @@ namespace Sophonautical
             return best;
         }
 
-        static float GetScore(BlockedImage image, Kernel kernel)
+        static float GetScore(BlockedImage image, Kernel kernel, PostScoreAction action = null)
         {
             var blocks = image.Blocks;
             float score = float.MaxValue;
@@ -298,7 +304,7 @@ namespace Sophonautical
             {
                 var block = blocks[i];
 
-                float error = kernel.Score(block);
+                float error = kernel.Score(block, action);
                 score = Math.Min(score, error);
             }
 
@@ -317,7 +323,7 @@ namespace Sophonautical
             return scores;
         }
 
-        static ScoreStats GetScoreStats(int Rows, BlockedImage[] images, Kernel kernel, int InLabel)
+        static ScoreStats GetScoreStats(int Rows, BlockedImage[] images, Kernel kernel, int InLabel, BlockTracker tracker = null)
         {
             var stats = new ScoreStats();
 
@@ -325,7 +331,8 @@ namespace Sophonautical
             {
                 var image = images[i];
 
-                var error = GetScore(image, kernel);
+                var action = tracker == null ? null : tracker.GetTrackInOut(image, InLabel);
+                float error = GetScore(image, kernel, action: action);
 
                 if (image.Label == InLabel)
                 {
