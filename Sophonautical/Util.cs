@@ -7,6 +7,49 @@ using System.Collections.Generic;
 
 namespace Sophonautical
 {
+    public static class UtilTest
+    {
+        public static float[,,] TestImage()
+        {
+            int dim = 2;
+            int channels = 2;
+            var image = new float[dim, dim, channels];
+            int count = 0;
+
+            for (int x = 0; x < dim; x++)
+            for (int y = 0; y < dim; y++)
+            for (int c = 0; c < channels; c++)
+            {
+                image[x, y, c] = count++;
+            }
+
+            return image;
+        }
+
+        public static void Run()
+        {
+            var test_image = TestImage();
+
+            var block = Util.AsBlock(test_image, BlockDim: 2, Channels: 2);
+            var reconstruction = Util.AsImage(block, channels: 2);
+
+            Debug.Assert(Util.Equal(test_image, reconstruction));
+
+            var block2 = Util.AsBlock(TestImage(), BlockDim: 2, Channels: 2);
+
+            var diff = Util.FuzzyDiff(block, block2, channels: 2);
+            Debug.Assert(Util.Norm1(diff) == 0);
+
+            block[0] = 4;
+            diff = Util.FuzzyDiff(block, block2, channels: 2);
+            Debug.Assert(Util.Norm1(diff) == 0);
+
+            block[0] = 10;
+            diff = Util.FuzzyDiff(block, block2, channels: 2);
+            Debug.Assert(Util.Norm1(diff) == 6);
+        }
+    }
+
     class Vector
     {
         public float[] vals;
@@ -63,15 +106,31 @@ namespace Sophonautical
         public static string s(float[,] data) { return pl.py_array(data); }
         public static string s(float[,,] data) { return pl.py_array(data); }
 
-        public static float[,,] AsImage(float[] data)
+        public static bool Equal(float[,,] a, float[,,] b)
         {
-            int BlockDim = (int)Math.Sqrt(data.Length / 3);
-            var image = new float[BlockDim, BlockDim, 3];
+            int dimx = a.GetLength(0);
+            int dimy = a.GetLength(1);
+            int dimz = a.GetLength(2);
+
+            for (int x = 0; x < dimx; x++)
+            for (int y = 0; y < dimy; y++)
+            for (int z = 0; z < dimz; z++)
+            {
+                if (a[x, y, z] != b[x, y, z]) return false;
+            }
+
+            return true;
+        }
+
+        public static float[,,] AsImage(float[] data, int channels = 3)
+        {
+            int BlockDim = (int)Math.Sqrt(data.Length / channels);
+            var image = new float[BlockDim, BlockDim, channels];
 
             int i = 0;
             for (int x = 0; x < BlockDim; x++)
             for (int y = 0; y < BlockDim; y++)
-            for (int c = 0; c < 3; c++)
+            for (int c = 0; c < channels; c++)
             {
                 image[x, y, c] = data[i++];
             }
@@ -109,6 +168,48 @@ namespace Sophonautical
             for (int i = 0; i < x.Length; i++) result[i] = x[i] * y;
 
             return result;
+        }
+
+        public static float[] FuzzyDiff(float[] block1, float[] block2, int channels)
+        {
+            int BlockDim = (int)Math.Sqrt(block1.Length / channels);
+            var _block1 = AsImage(block1, channels: channels);
+            var _block2 = AsImage(block2, channels: channels);
+
+            for (int x = 0; x < BlockDim; x++)
+            for (int y = 0; y < BlockDim; y++)
+            for (int c = 0; c < channels; c++)
+            {
+                float                 min =               Math.Abs(_block1[x, y, c] - _block2[x, y, c]);
+                if (x > 0)            min = Math.Min(min, Math.Abs(_block1[x, y, c] - _block2[x - 1, y, c]));
+                if (x + 1 < BlockDim) min = Math.Min(min, Math.Abs(_block1[x, y, c] - _block2[x + 1, y, c]));
+                if (y > 0)            min = Math.Min(min, Math.Abs(_block1[x, y, c] - _block2[x, y - 1, c]));
+                if (y + 1 < BlockDim) min = Math.Min(min, Math.Abs(_block1[x, y, c] - _block2[x, y + 1, c]));
+
+                _block1[x, y, c] = min;
+            }
+
+            var block = AsBlock(_block1, BlockDim: BlockDim, Channels: channels);
+
+            return block;
+        }
+
+        public static float[] AsBlock(float[,,] image, int BlockDim, int Channels = 3)
+        {
+            int BlockSize = BlockDim * BlockDim * Channels;
+            var block = new float[BlockSize];
+
+            int i = 0;
+            for (int _x = 0; _x < BlockDim; _x++)
+            for (int _y = 0; _y < BlockDim; _y++)
+            for (int _c = 0; _c < Channels; _c++)
+            {
+                block[i++] = (float)image[_x, _y, _c];
+            }
+
+            Debug.Assert(i == BlockSize);
+
+            return block;
         }
 
         public static float NormInf(float[] vec)

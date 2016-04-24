@@ -14,6 +14,9 @@ namespace Sophonautical
         static void Test()
         {
             return;
+
+            UtilTest.Run();
+
             Console.WriteLine(s(new float[,] { { 1, 2 }, { 4, 5 } }));
 
             var k = new AffineKernel(new float[] { 1, 2, 3 }, new float[] { 0, 0, 0 });

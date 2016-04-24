@@ -33,6 +33,7 @@ namespace Sophonautical
 
         public virtual float[] Remainder(float[] input)
         {
+            //return FuzzyDiff(input, Reconstruct(input), channels: 3);
             return minus(input, Reconstruct(input));
         }
 
