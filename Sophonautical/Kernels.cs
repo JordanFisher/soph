@@ -62,6 +62,7 @@ namespace Sophonautical
         {
             var remainder = Remainder(input);
             var error = Norm1Thresh(remainder, threshold: threshold) / input.Length;
+            //var error = Norm2(remainder) / input.Length;
 
             if (action != null) action(this, input, error, remainder);
 
@@ -112,7 +113,7 @@ namespace Sophonautical
 
         public override string ShortDescription()
         {
-            return $"l1thresh {threshold:0.0000}  class-threh {ClassificationCutoff:0.0000}";
+            return $"l1-thresh {threshold:0.000}  class-thresh {ClassificationCutoff:0.000}";
         }
     }
 }

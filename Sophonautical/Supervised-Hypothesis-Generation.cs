@@ -74,7 +74,6 @@ namespace Sophonautical
                 foreach (var kernel in list)
                 {
                     var result = GetScoreStats(TestSize, blocked_images, kernel.Item1, label);
-                    Console.WriteLine($"Score is {result.InOutHitRatio} with an in ratio of {result.InHitRatio}");
                 }
             }
 
@@ -112,21 +111,28 @@ namespace Sophonautical
         public static void SupervisedKernelHgForLabel(int Rows, LabeledImage[] images, int InLabel)
         {
             // Select training set and test set.
-            const int TrainingSize = 9000;
+            const int TrainingSize = 1000;
             int TestSize = Rows - TrainingSize;
             var TrainingSet = Subset(Rows, images, TrainingSize);
             var TestSet = Remainder(images, TrainingSet);
 
             // Select smaller set to generate leads with.
-            const int LeadSize = 200;
+            const int LeadSize = 1000;
             const int InLabelSize = LeadSize / 2;
 
             LabeledImage[] LeadSet = SampleSet(TrainingSize, TrainingSet, InLabel, LeadSize, InLabelSize);
 
+            // Select validation set to test lead set.
+            //var _remainder = Remainder(TrainingSet, LeadSet);
+            //var ValidationSet = SampleSet(_remainder.Length, _remainder, InLabel, LeadSize, InLabelSize);
+            //int ValidationSize = LeadSize;
+
             // Get list of candidate kernels from the lead set.
-            var list = Learn_SupervisedKernelHg(LeadSize, LeadSet, InLabel: InLabel, InLabelMinRatio: 0.2f, SearchLength: 50);
+            //var list = Learn_SupervisedKernelHg(LeadSize, LeadSet, InLabel: InLabel, InLabelMinRatio: 0.05f, SearchLength: 5);
+            var list = Learn_SupervisedKernelHg(TrainingSize, TrainingSet, InLabel: InLabel, InLabelMinRatio: 0.05f, SearchLength: 2000);
             list.Sort((kernelScore1, kernelScore2) => kernelScore2.Item2.CompareTo(kernelScore1.Item2));
 
+            Console.WriteLine();
             foreach (var kernelScore in list)
             {
                 Console.WriteLine($"{kernelScore.Item2}");
@@ -140,7 +146,7 @@ namespace Sophonautical
             {
                 var tracker = new BlockTracker();
                 var result = GetScoreStats(TestSize, blocks, kernel.Item1, InLabel, tracker);
-                Console.WriteLine($"Score is {result.InOutHitRatio} with an in ratio of {result.InHitRatio}");
+                Console.WriteLine();
 
                 //pl.plot(Average(tracker.in_remainders), Average(tracker.out_remainders));
                 //pl.plot(Average(tracker.in_blocks), Average(tracker.out_blocks));
@@ -150,6 +156,83 @@ namespace Sophonautical
                 //var score = OptimizeKernelCutoff(TestSize, blocks, kernel.Item1, InLabel: InLabel, InLabelMinRatio: 0.2f);
                 //Console.WriteLine($"Score is {score.InOutHitRatio} with an in ratio of {score.InHitRatio}");
             }
+        }
+
+        public static void KernelPerformanceFeature(int Rows, LabeledImage[] images)
+        {
+            // Select training set and test set.
+            const int TrainingSize = 2000;
+            int TestSize = Rows - TrainingSize;
+            var TrainingSet = Subset(Rows, images, TrainingSize);
+            var TestSet = Remainder(images, TrainingSet);
+
+            const int BlockDim = 5;
+            var blocked_images = GetBlocks(TrainingSet, TrainingSize, Width, Height, Channels: 3, BlockDim: BlockDim, AddMirrors: true);
+
+            // Get performance vectors.
+            var perf_vectors = new Dictionary<int, List<float[]>>();
+            for (int label = 0; label < NumLabels; label++) perf_vectors.Add(label, new List<float[]>());
+            int count = 0;
+            foreach (var image in TestSet)
+            {
+                if (image.Label != 0 && image.Label != 1) continue;
+                count++; if (count > 25) break;
+
+                var perf = GetKernelPerformance(image, blocked_images);
+                perf_vectors[image.Label].Add(perf);
+            }
+
+            pl.plot(perf_vectors[0], perf_vectors[1]);
+        }
+
+        static float[] GetKernelPerformance(LabeledImage image, BlockedImage[] blocked_images)
+        {
+            const int BlockDim = 5;
+            var blocked = GetBlockedImage(image, Width, Height, Channels: 3, BlockDim: BlockDim, AddMirrors: true);
+
+            Console.WriteLine($"Looking at image with label {image.Label}.");
+
+            var total_perf = new float[NumLabels];
+            for (int i = 0; i < 200; i++)
+            {
+                var _blocks = blocked.Blocks;
+
+                var w_block = _blocks[rnd.Next(0, _blocks.Length)];
+                var b_block = _blocks[rnd.Next(0, _blocks.Length)];
+
+                var kernel = (AffineKernel)FormHypothesis(w_block.Length, w_block, b_block);
+
+                float[] source_score = GetScores(blocked_images.Length, blocked_images, kernel);
+                var labels = get_labels(blocked_images);
+
+                var kernel_perf = new float[NumLabels];
+                for (int label = 0; label < NumLabels; label++)
+                {
+                    var score = OptimizeCutoff(blocked_images.Length, kernel, label, InLabelMinRatio:0.1f, source_score:source_score, labels:labels);
+                    kernel_perf[label] = score.Precision;
+                    total_perf[label] += score.Precision;
+
+                    Console.Write($"{label}:{score.Precision:0.00} ");
+                }
+                Console.WriteLine();
+            }
+
+            Console.Write("Totals:\n  ");
+            int argmax = -1; float max = 0;
+            for (int label = 0; label < NumLabels; label++)
+            {
+                Console.Write($"{label}:{total_perf[label]:0.00} ");
+                if (argmax < 0 || total_perf[label] > max)
+                {
+                    argmax = label;
+                    max = total_perf[label];
+                }
+            }
+
+            Console.WriteLine();
+            Console.WriteLine($"Guessing label {argmax}.");
+
+            return total_perf;
         }
 
         static List<Tuple<AffineKernel, float>> Learn_SupervisedKernelHg(int Rows, LabeledImage[] images, int InLabel,
@@ -200,7 +283,11 @@ namespace Sophonautical
                         best_score = score.InOutHitRatio;
                         best_kernel = kernel;
 
-                        Console.WriteLine($"(Iteration {i}) New best with a score of {best_score}, in label ratio of {score.InHitRatio} with a threshold of {kernel.ClassificationCutoff}.");
+                        Console.WriteLine($"(Iteration {i}) New best with a score of {best_score}.");
+                        Console.WriteLine(kernel.ShortDescription());
+                        Console.WriteLine(score);
+                        Console.WriteLine();
+
                         best_kernel.Plot();
                     }
                 }
@@ -257,14 +344,14 @@ namespace Sophonautical
                 //kernel.w[j] = (float)rnd.NextDouble();
                 //kernel.b[j] = (float)rnd.NextDouble();
 
-                kernel.w[j] = w_block[j] - b_block[j];
-                kernel.b[j] = b_block[j];
+                //kernel.w[j] = w_block[j] - b_block[j];
+                //kernel.b[j] = b_block[j];
 
                 //kernel.w[j] = w_block[j];
                 //kernel.b[j] = 0;
 
-                //kernel.w[j] = 1;
-                //kernel.b[j] = b_block[j];
+                kernel.w[j] = 1;
+                kernel.b[j] = b_block[j];
             }
 
             Normalize(kernel.w);
@@ -278,6 +365,11 @@ namespace Sophonautical
             float[] source_score = GetScores(Rows, blocks, kernel);
             var labels = get_labels(blocks);
 
+            return OptimizeCutoff(Rows, kernel, InLabel, InLabelMinRatio, source_score, labels);
+        }
+
+        static ScoreStats OptimizeCutoff(int Rows, Kernel kernel, int InLabel, float InLabelMinRatio, float[] source_score, byte[] labels)
+        {
             ScoreStats best = null;
 
             for (int i = 0; i < 1000; i++)
@@ -348,7 +440,9 @@ namespace Sophonautical
                 }
             }
 
-            Console.WriteLine($"  - in label {stats.InHit} / {stats.InCount}  - out label {stats.OutHit} / {stats.OutCount}  - {kernel.ShortDescription()}");
+            Console.WriteLine($"Score is {stats.InOutHitRatio}");
+            Console.WriteLine(kernel.ShortDescription());
+            Console.WriteLine(stats);
 
             return stats;
         }

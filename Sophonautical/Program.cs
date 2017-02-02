@@ -42,7 +42,8 @@ namespace Sophonautical
             LabeledImage[] images = Init();
 
             //SupervisedHypothesisGeneration.SupervisedKernelHg(Rows, images);
-            SupervisedHypothesisGeneration.SupervisedKernelHgForLabel(Rows, images, InLabel: 7);
+            //SupervisedHypothesisGeneration.SupervisedKernelHgForLabel(Rows, images, InLabel: 0);
+            SupervisedHypothesisGeneration.KernelPerformanceFeature(Rows, images);
 
             //Learn_Multilevel(images, labels);
 

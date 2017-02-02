@@ -231,6 +231,17 @@ fig, ({pl}) = pl.subplots(1,{plots.Length})
             return line_plot(py_array(data), plot_ref);
         }
 
+        public string make_plot(List<float[]> data, string plot_ref = "pl")
+        {
+            string s = "";
+            foreach (var vec in data)
+            {
+                s += line_plot(py_array(vec), plot_ref) + '\n';
+            }
+
+            return s;
+        }
+
         public string make_plot(float[,] data, string plot_ref = "pl")
         {
             return image_plot(py_array(data), plot_ref);
@@ -254,6 +265,9 @@ fig, ({pl}) = pl.subplots(1,{plots.Length})
             else if (t == typeof(float[,]))  return make_plot((float[,])  data, plot_ref);
             else if (t == typeof(float[,,])) return make_plot((float[,,]) data, plot_ref);
             else if (t == typeof(byte[,,]))  return make_plot((byte[,,])  data, plot_ref);
+
+            else if (t == typeof(List<float[]>)) return make_plot((List<float[]>)data, plot_ref);
+
             else throw new NotImplementedException();
         }
 
@@ -283,6 +297,12 @@ fig, ({pl}) = pl.subplots(1,{plots.Length})
         {
             // Test line plot.
             plot(new float[] { 1, 2, 4, 9, 16, 25 });
+
+            // Test double line plot.
+            var list = new List<float[]>();
+            list.Add(new float[] { 1, 2, 3 });
+            list.Add(new float[] { 2, 2, 1 });
+            plot(list);
 
             // Test image plot.
             plot(new float[,] { { 1, 2, 3, 4 }, { 4, 3, 2, 1 } });

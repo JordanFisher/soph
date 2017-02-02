@@ -12,8 +12,8 @@ namespace Sophonautical
     {
         public int InHit = 0, InCount = 0, OutHit = 0, OutCount = 0;
 
-        public float Precision { get { return (float)InHit / (InHit + OutHit); } }
-        public float Recall { get { return (float)InHit / (OutHit + .001f); } }
+        public float Precision { get { return (float)InHit / (InHit + OutHit + .001f); } }
+        public float Recall { get { return (float)InHit / (InCount + .001f); } }
         public float Accuracy { get { return (float)(InHit + OutReject) / (InCount + OutCount); } }
 
         public int InReject { get { return InCount - InHit; } }
@@ -22,6 +22,11 @@ namespace Sophonautical
         public float InHitRatio { get { return (float)InHit / (InCount + .001f); } }
         public float OutHitRatio { get { return (float)OutHit / (OutCount + .001f); } }
         public float InOutHitRatio { get { return InHitRatio / OutHitRatio; } }
+
+        public override string ToString()
+        {
+            return $"Precision = {Precision} Recall = {Recall} Accuracy = {Accuracy} : In = {InHit}/{InCount} Out = {OutHit}/{OutCount}";
+        }
     }
 
     public class ClassificationStats

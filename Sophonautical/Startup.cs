@@ -22,8 +22,8 @@ namespace Sophonautical
 
         public static void Startup()
         {
-            pl = new Plot(OutputDir, Quiet: false, Save: true);
-            //pl = new Plot(OutputDir, Quiet: true, Save: true);
+            //pl = new Plot(OutputDir, Quiet: false, Save: true);
+            pl = new Plot(OutputDir, Quiet: true, Save: true);
             rnd = new Random(1);
         }
 
@@ -54,28 +54,28 @@ namespace Sophonautical
                     pixels[x, y, channel] = bytes[source_index++] / 255f;
                 }
 
-                //// Swap out source images for derivatives.
-                //var diff = new float[Width, Height, 3];
-                //for (int x = 0; x < Width; x++)
-                //for (int y = 0; y < Height; y++)
-                //{
-                //    diff[x, y, 0] = .33333f * (pixels[x, y, 0] + pixels[x, y, 0] + pixels[x, y, 0]);
-                //    diff[x, y, 1] = 0;
-                //    diff[x, y, 2] = 0;
-                //}
-                //for (int x = 1; x < Width - 1; x++)
-                //for (int y = 1; y < Height - 1; y++)
-                //{
-                //    diff[x, y, 1] = 10 * (pixels[x + 1, y, 0] - pixels[x, y, 0]);
-                //    diff[x, y, 2] = 10 * (pixels[x, y + 1, 0] - pixels[x, y, 0]);
-                //}
-                //for (int x = 0; x < Width; x++)
-                //for (int y = 0; y < Height; y++)
-                //{
-                //    diff[x, y, 0] = 0;
-                //}
+                // Swap out source images for derivatives.
+                var diff = new float[Width, Height, 3];
+                for (int x = 0; x < Width; x++)
+                for (int y = 0; y < Height; y++)
+                {
+                    diff[x, y, 0] = .33333f * (pixels[x, y, 0] + pixels[x, y, 0] + pixels[x, y, 0]);
+                    diff[x, y, 1] = 0;
+                    diff[x, y, 2] = 0;
+                }
+                for (int x = 1; x < Width - 1; x++)
+                for (int y = 1; y < Height - 1; y++)
+                {
+                    diff[x, y, 1] = 10 * (pixels[x + 1, y, 0] - pixels[x, y, 0]);
+                    diff[x, y, 2] = 10 * (pixels[x, y + 1, 0] - pixels[x, y, 0]);
+                }
+                for (int x = 0; x < Width; x++)
+                for (int y = 0; y < Height; y++)
+                {
+                    diff[x, y, 0] = 0;
+                }
 
-                //images[row].Pixels = diff;
+                images[row].Pixels = diff;
             }
 
             Debug.Assert(source_index == Rows * RowSize);
@@ -83,14 +83,24 @@ namespace Sophonautical
             return images;
         }
 
+        public static BlockedImage GetBlockedImage(LabeledImage input, int Width, int Height, int Channels,
+            int BlockDim, bool AddMirrors = false)
+        {
+            var result = GetBlocks(new LabeledImage[] { input }, 1, Width, Height, Channels, BlockDim, AddMirrors);
+            return result[0];
+        }
+
         public static BlockedImage[] GetBlocks(LabeledImage[] inputs, int Rows, int Width, int Height, int Channels,
             int BlockDim, bool AddMirrors = false)
         {
             int BlockSize = BlockDim * BlockDim * Channels;
 
+            //const int NumMirrors = 8;
+            const int NumMirrors = 2;
+
             // Unpack blocks.
             int num_blocks = (Width - (BlockDim - 1)) * (Height - (BlockDim - 1));
-            if (AddMirrors) num_blocks *= 8;
+            if (AddMirrors) num_blocks *= NumMirrors;
 
             var blocked_images = new BlockedImage[Rows];
 
@@ -103,7 +113,7 @@ namespace Sophonautical
 
                 int block_index = 0;
 
-                for (int mirror = 0; mirror < (AddMirrors ? 8 : 1); mirror++)
+                for (int mirror = 0; mirror < (AddMirrors ? NumMirrors : 1); mirror++)
                 for (int x = 0; x < Width - (BlockDim - 1); x++)
                 for (int y = 0; y < Height - (BlockDim - 1); y++)
                 {
